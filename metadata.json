@@ -1,0 +1,6 @@
+{
+  "name": "SmartSpend AI - Intelligent Expense Tracker",
+  "description": "Parse unstructured text descriptions and receipt images into structured expense data with AI financial insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -44,7 +44,7 @@ The fallback text parser uses amount patterns and category keywords. Its image b
 | Port is already occupied | Set `PORT` to an available port and use that port in the browser. |
 | Production cannot serve the frontend | Run `npm run build` and verify `dist/` exists before starting with `NODE_ENV=production`. |
 | Production cannot find `tsx` | The start script needs `tsx`, currently listed in development dependencies. Ensure it is installed in the runtime environment. |
-| Dependency installation fails | Inspect npm's exact error and the dependency versions in `package.json`. No lockfile is currently committed. |
+| Dependency installation fails | Use a supported Node.js version and run `npm ci` with the committed package.json and lockfile. See the [README troubleshooting guide](../README.md#troubleshooting) for known installation errors. |
 
 ## Areas for future work
 
@@ -54,6 +54,5 @@ These are proposals, not implemented features or release commitments:
 - Export/import and recovery for browser-stored records.
 - Calendar-month filtering for monthly budget totals.
 - Automated tests for parsing, persistence, and transaction editing.
-- A reproducible dependency lockfile and documented runtime version.
 - Consistent MicroLedger naming throughout the interface.
 - A repository-wide license selected by the owner.

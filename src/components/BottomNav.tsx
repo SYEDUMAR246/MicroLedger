@@ -1,81 +1,10 @@
 import React from 'react';
-import { Home, CreditCard, Plus, PieChart, RotateCcw } from 'lucide-react';
-
-interface BottomNavProps {
-  activeTab: 'home' | 'expenses' | 'analytics';
-  onTabChange: (tab: 'home' | 'expenses' | 'analytics') => void;
-  onOpenAddModal: () => void;
-  onResetData: () => void;
+import { motion, useReducedMotion } from 'motion/react';
+import { House, List, ChartNoAxesColumn, UserRound, Plus } from 'lucide-react';
+export type AppTab='home'|'expenses'|'plan'|'profile';
+export function BottomNav({activeTab,onTabChange,onOpenAddModal}:{activeTab:AppTab;onTabChange:(tab:AppTab)=>void;onOpenAddModal:()=>void}) {
+  const reduced=useReducedMotion();
+  const tabs=[{id:'home' as const,label:'Home',icon:House},{id:'expenses' as const,label:'Activity',icon:List},{id:'plan' as const,label:'Plan',icon:ChartNoAxesColumn},{id:'profile' as const,label:'Profile',icon:UserRound}];
+  const button=(tab:typeof tabs[number])=><motion.button key={tab.id} type="button" whileTap={reduced?undefined:{scale:.94}} aria-current={activeTab===tab.id?'page':undefined} onClick={()=>onTabChange(tab.id)} className={'min-w-12 flex flex-col gap-1 items-center py-2 px-1 text-[10px] '+(activeTab===tab.id?'text-orange-600 font-semibold':'text-slate-500')}><tab.icon className="w-5 h-5"/>{tab.label}</motion.button>;
+  return <nav aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 px-5 pt-1 pb-[max(8px,env(safe-area-inset-bottom))] sm:max-w-lg sm:mx-auto sm:bottom-3 sm:rounded-[28px] sm:border sm:shadow-lg"><div className="flex justify-between items-center max-w-md mx-auto">{tabs.slice(0,2).map(button)}<motion.button type="button" whileTap={reduced?undefined:{scale:.91}} onClick={onOpenAddModal} aria-label="Add expense" className="w-14 h-14 -mt-5 rounded-full bg-orange-500 text-white ring-4 ring-white flex items-center justify-center shadow-lg shadow-orange-500/20"><Plus className="w-7 h-7"/></motion.button>{tabs.slice(2).map(button)}</div></nav>;
 }
-
-export const BottomNav: React.FC<BottomNavProps> = ({
-  activeTab,
-  onTabChange,
-  onOpenAddModal,
-  onResetData,
-}) => {
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 py-2 sm:py-2.5 px-6 shadow-lg sm:max-w-md sm:mx-auto sm:bottom-4 sm:rounded-3xl sm:border sm:shadow-xl">
-      <div className="flex items-center justify-between max-w-sm mx-auto">
-        {/* Home */}
-        <button
-          type="button"
-          onClick={() => onTabChange('home')}
-          className={`flex flex-col items-center gap-1 p-1.5 transition-colors cursor-pointer ${
-            activeTab === 'home' ? 'text-orange-500 font-bold' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Home className="w-5 h-5" />
-          <span className="text-[10px]">Home</span>
-        </button>
-
-        {/* Expenses */}
-        <button
-          type="button"
-          onClick={() => onTabChange('expenses')}
-          className={`flex flex-col items-center gap-1 p-1.5 transition-colors cursor-pointer ${
-            activeTab === 'expenses' ? 'text-orange-500 font-bold' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <CreditCard className="w-5 h-5" />
-          <span className="text-[10px]">Expenses</span>
-        </button>
-
-        {/* Center Prominent Orange Plus Button (matching screenshot) */}
-        <div className="-mt-6">
-          <button
-            type="button"
-            onClick={onOpenAddModal}
-            className="w-12 h-12 rounded-full bg-gradient-to-tr from-orange-600 to-orange-400 text-white flex items-center justify-center shadow-lg shadow-orange-500/40 hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-white"
-            title="Add Expense"
-          >
-            <Plus className="w-6 h-6 stroke-[3]" />
-          </button>
-        </div>
-
-        {/* Analytics */}
-        <button
-          type="button"
-          onClick={() => onTabChange('analytics')}
-          className={`flex flex-col items-center gap-1 p-1.5 transition-colors cursor-pointer ${
-            activeTab === 'analytics' ? 'text-orange-500 font-bold' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <PieChart className="w-5 h-5" />
-          <span className="text-[10px]">Analytics</span>
-        </button>
-
-        {/* Reset Demo Data */}
-        <button
-          type="button"
-          onClick={onResetData}
-          title="Reset to sample data"
-          className="flex flex-col items-center gap-1 p-1.5 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-        >
-          <RotateCcw className="w-5 h-5" />
-          <span className="text-[10px]">Reset</span>
-        </button>
-      </div>
-    </nav>
-  );
-};

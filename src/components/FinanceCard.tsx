@@ -1,132 +1,60 @@
 import React from 'react';
-import { formatPKR } from '../types';
-import { CreditCard, ArrowUpRight, ArrowDownLeft, Plus, Camera, Sparkles, TrendingUp } from 'lucide-react';
+import { ArrowUpRight, Camera, FilePenLine, Sparkles, Wallet, ArrowDownRight } from 'lucide-react';
+import { formatPKR, type StoredTransaction } from '../types';
+import { monthSummary } from '../lib/planning';
 
 interface FinanceCardProps {
-  totalSpentPKR: number;
+  transactions: StoredTransaction[];
+  month: string;
   monthlyBudgetPKR: number;
   onOpenAddModal: (mode?: 'text' | 'receipt' | 'manual') => void;
   onAdjustBudget: () => void;
 }
 
-export const FinanceCard: React.FC<FinanceCardProps> = ({
-  totalSpentPKR,
-  monthlyBudgetPKR,
-  onOpenAddModal,
-  onAdjustBudget,
-}) => {
-  // Assume a base salary or starting balance
-  const remainingBudget = Math.max(0, monthlyBudgetPKR - totalSpentPKR);
-  const spentPercent = Math.min(Math.round((totalSpentPKR / (monthlyBudgetPKR || 1)) * 100), 100);
-
-  return (
-    <div className="space-y-4">
-      {/* Dark Luxury Credit / Balance Card (Matching Reference 1 & Reference 2) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-6 sm:p-7 text-white shadow-xl shadow-slate-900/15">
-        {/* Subtle geometric pattern rings */}
-        <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full bg-white/5 blur-2xl pointer-events-none" />
-        <div className="absolute right-10 -bottom-10 w-44 h-44 rounded-full bg-indigo-500/10 blur-xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col justify-between h-48 sm:h-52">
-          {/* Card Top Row */}
-          <div className="flex items-start justify-between">
-            <div>
-              <span className="text-xs font-medium text-slate-300 tracking-wide uppercase">
-                Available Balance
-              </span>
-              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight mt-1 text-white">
-                {formatPKR(remainingBudget)}
-              </div>
-            </div>
-
-            {/* Mastercard Style Circles */}
-            <div className="flex items-center -space-x-2">
-              <div className="w-8 h-8 rounded-full bg-rose-500/90 shadow-sm" />
-              <div className="w-8 h-8 rounded-full bg-amber-400/90 shadow-sm" />
-            </div>
+export function FinanceCard({transactions, month, monthlyBudgetPKR, onOpenAddModal, onAdjustBudget}: FinanceCardProps) {
+  const summary = monthSummary(transactions, monthlyBudgetPKR, month);
+  const usage = summary.spent / monthlyBudgetPKR * 100;
+  return <section aria-label="Monthly overview" className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-950 p-6 sm:p-8 text-white shadow-xl shadow-slate-900/10">
+        <div className="absolute -right-12 -top-20 w-64 h-64 rounded-full border-[32px] border-white/[0.035] pointer-events-none" />
+        <div className="relative">
+          <div className="flex justify-between gap-3 items-start">
+            <p className="text-xs font-semibold tracking-[0.18em] uppercase text-slate-300">Your month, in focus</p>
+            <Wallet className="w-5 h-5 text-orange-300" />
           </div>
-
-          {/* Chip and Contactless representation */}
-          <div className="flex items-center justify-between">
-            <div className="w-9 h-7 rounded-md bg-gradient-to-tr from-amber-200 to-amber-400 border border-amber-500/40 shadow-xs flex items-center justify-center">
-              <div className="w-6 h-4 border border-amber-800/30 rounded-xs" />
-            </div>
-            <div className="text-xs text-slate-400 font-mono tracking-wider">
-              VISA / MASTERCARD
-            </div>
+          <p className="text-sm text-slate-300 mt-7">{summary.remaining < 0 ? 'Over your monthly budget' : 'Left in your monthly budget'}</p>
+          <p className="text-3xl sm:text-5xl font-bold tracking-tight mt-2 break-words">{formatPKR(Math.abs(summary.remaining))}</p>
+          <div className="mt-6 h-2 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-label="Monthly budget used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(usage))}>
+            <div className={'h-full rounded-full ' + (usage > 100 ? 'bg-rose-400' : 'bg-orange-400')} style={{width:Math.min(100,usage) + '%'}} />
           </div>
-
-          {/* Card Bottom Row */}
-          <div className="flex items-end justify-between text-xs font-mono tracking-widest text-slate-300">
-            <div>2944 •••• •••• 1905</div>
-            <div className="text-[11px] font-sans text-slate-400">10 / 28</div>
+          <div className="flex justify-between items-center gap-3 mt-3 text-xs text-slate-300">
+            <span>{usage.toFixed(1)}% of {formatPKR(monthlyBudgetPKR)}</span>
+            <button type="button" onClick={onAdjustBudget} className="text-white underline underline-offset-4 shrink-0">Edit budget</button>
           </div>
         </div>
       </div>
-
-      {/* Two Colorful Stats Cards (Matching Screenshot 2: Purple & Orange Cards) */}
-      <div className="grid grid-cols-2 gap-3.5 sm:gap-4">
-        {/* Purple Card: Monthly Budget */}
-        <div
-          onClick={onAdjustBudget}
-          className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-4 sm:p-5 text-white shadow-md shadow-purple-600/20 relative overflow-hidden cursor-pointer hover:shadow-lg transition-all group"
-        >
-          <div className="absolute top-2 right-2 p-1.5 rounded-full bg-white/10 opacity-70 group-hover:opacity-100 transition-opacity">
-            <ArrowDownLeft className="w-4 h-4" />
-          </div>
-          <div className="text-xs font-medium text-purple-200">Total Budget</div>
-          <div className="text-lg sm:text-xl font-bold tracking-tight mt-1">
-            {formatPKR(monthlyBudgetPKR)}
-          </div>
-          <div className="mt-2 text-[11px] text-purple-200 flex items-center gap-1">
-            <span>Tap to edit</span>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-4">
+        <div className="rounded-3xl border border-slate-200/70 bg-white p-6">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Spent this month</p>
+          <p className="text-2xl font-bold text-slate-900 mt-2">{formatPKR(summary.spent)}</p>
+          <div className="flex items-start gap-1.5 mt-3 text-xs text-slate-500">
+            {summary.difference > 0 ? <ArrowUpRight className="w-4 h-4 shrink-0" /> : <ArrowDownRight className="w-4 h-4 shrink-0" />}
+            <span>{formatPKR(Math.abs(summary.difference))} {summary.difference > 0 ? 'more' : summary.difference < 0 ? 'less' : 'change'} vs previous month. Whole-month totals; this month may be incomplete.</span>
           </div>
         </div>
-
-        {/* Orange Card: Total Expense */}
-        <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-4 sm:p-5 text-white shadow-md shadow-orange-500/20 relative overflow-hidden">
-          <div className="absolute top-2 right-2 p-1.5 rounded-full bg-white/10">
-            <ArrowUpRight className="w-4 h-4" />
-          </div>
-          <div className="text-xs font-medium text-orange-100">Total Expense</div>
-          <div className="text-lg sm:text-xl font-bold tracking-tight mt-1">
-            {formatPKR(totalSpentPKR)}
-          </div>
-          <div className="mt-2 text-[11px] text-orange-100 font-medium">
-            {spentPercent}% of monthly limit
-          </div>
+        <div className="rounded-3xl border border-orange-100 bg-orange-50/70 p-6">
+          <p className="text-xs font-semibold text-orange-800 uppercase tracking-wider">Daily allowance</p>
+          <p className="text-2xl font-bold text-slate-900 mt-2">{summary.dailyAllowance === null ? 'Month complete' : formatPKR(summary.dailyAllowance)}</p>
+          <p className="text-xs text-slate-600 mt-3">{summary.daysLeft ? 'Remaining budget ÷ ' + summary.daysLeft + ' calendar days, including today for the current month. Unlogged bills are not deducted.' : 'Choose the current or an upcoming month to plan ahead.'}</p>
         </div>
-      </div>
-
-      {/* Action Shortcut Pills */}
-      <div className="flex items-center gap-2 pt-1">
-        <button
-          type="button"
-          onClick={() => onOpenAddModal('text')}
-          className="flex-1 py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-medium text-xs shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4 text-orange-500" />
-          <span>Quick Note / AI</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onOpenAddModal('receipt')}
-          className="flex-1 py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-medium text-xs shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-        >
-          <Camera className="w-4 h-4 text-indigo-500" />
-          <span>Scan Receipt</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onOpenAddModal('manual')}
-          className="flex-1 py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-medium text-xs shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-        >
-          <CreditCard className="w-4 h-4 text-emerald-500" />
-          <span>Manual Entry</span>
-        </button>
       </div>
     </div>
-  );
-};
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      {[{mode:'text' as const, label:'Smart Note', icon:Sparkles}, {mode:'receipt' as const,label:'Scan receipt',icon:Camera}, {mode:'manual' as const,label:'Manual entry',icon:FilePenLine}].map(action =>
+        <button type="button" key={action.mode} onClick={() => onOpenAddModal(action.mode)} className="rounded-2xl bg-white border border-slate-200/70 px-2 py-3.5 text-xs sm:text-sm font-semibold text-slate-700 hover:border-orange-300 hover:bg-orange-50 transition-colors flex items-center justify-center gap-2">
+          <action.icon className="w-4 h-4 text-orange-600 shrink-0" /><span>{action.label}</span>
+        </button>)}
+    </div>
+  </section>;
+}

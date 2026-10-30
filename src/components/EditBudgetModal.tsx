@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { X, Check, Wallet, ArrowRight } from 'lucide-react';
 import { formatPKR } from '../types';
+import { parsePKR } from '../lib/finance';
 
 interface EditBudgetModalProps {
   currentBudget: number;
+  minimumBudget?: number;
   totalSpent: number;
-  onSaveBudget: (newBudget: number) => void;
+  onSaveBudget: (newBudget: number) => boolean;
   onClose: () => void;
 }
 
 export const EditBudgetModal: React.FC<EditBudgetModalProps> = ({
   currentBudget,
+  minimumBudget = 0,
   totalSpent,
   onSaveBudget,
   onClose,
@@ -22,12 +25,16 @@ export const EditBudgetModal: React.FC<EditBudgetModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseFloat(budgetInput.replace(/,/g, ''));
-    if (isNaN(val) || val <= 0) {
+    const val = parsePKR(budgetInput);
+    if (val === null) {
       setError('Please enter a valid positive budget amount in PKR.');
       return;
     }
-    onSaveBudget(val);
+    if (val < minimumBudget) {setError('Your category limits total ' + formatPKR(minimumBudget) + '. Lower those limits before reducing the monthly budget.');return;}
+    if (!onSaveBudget(val)) {
+      setError('Could not save the budget. Allow site storage or free storage space and retry. If another tab changed the ledger, reload before saving.');
+      return;
+    }
     onClose();
   };
 

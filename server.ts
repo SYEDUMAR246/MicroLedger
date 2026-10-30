@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
+import { extractPKR, localDate, validDate, validParsedTransaction } from './src/lib/finance';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,7 +53,7 @@ function parseExpenseInput(
   currentDate?: string,
   currentTime?: string
 ) {
-  const effectiveDate = currentDate || '2026-10-29';
+  const effectiveDate = validDate(currentDate) ? currentDate : localDate();
   const effectiveTime =
     currentTime ||
     new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -64,6 +66,9 @@ function parseExpenseInput(
     };
   }
 
+  if (image) {
+    return { status: 'error', message: "Couldn't read this receipt. Try scanning again or enter the details in Manual Form. No expense has been saved." };
+  }
   const cleanText = (text || '').trim();
 
   // If only text is provided and it looks like a generic query / greeting without monetary intent
@@ -105,38 +110,16 @@ function parseExpenseInput(
   if (datePattern) {
     txDate = datePattern[1];
   } else if (/yesterday/i.test(cleanText)) {
-    const d = new Date(effectiveDate);
+    const d = new Date(effectiveDate + 'T12:00:00');
     d.setDate(d.getDate() - 1);
-    txDate = d.toISOString().split('T')[0];
+    txDate = localDate(d);
   }
 
-  // To prevent matching year (2026) or time (14:30) as amount, create a sanitized text for amount searching
-  let textForAmount = cleanText
-    .replace(/\b202\d-[01]\d-[0-3]\d\b/g, ' ')
-    .replace(/\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*(am|pm))?\b/gi, ' ');
-
-  // Amount extraction - first try explicit currency patterns: Rs. 500, 500 PKR, etc.
-  const explicitCurrMatch = textForAmount.match(/(?:PKR|Rs\.?|₨|\$|€|£)\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:PKR|Rs\.?|₨|\$|€|£)/i);
-  if (explicitCurrMatch) {
-    const numStr = explicitCurrMatch[1] || explicitCurrMatch[2];
-    amount = parseFloat(numStr.replace(/,/g, ''));
-  } else {
-    // Try "for 500", "of 500", "spent 500"
-    const prepNumMatch = textForAmount.match(/(?:for|of|spent|paid|amount)\s+(\d+(?:[.,]\d{1,2})?)/i);
-    if (prepNumMatch) {
-      amount = parseFloat(prepNumMatch[1].replace(/,/g, ''));
-    } else {
-      // Find all standalone numbers and pick the most reasonable amount (usually last or largest non-year number)
-      const allNums = Array.from(textForAmount.matchAll(/\b(\d+(?:,\d{3})*(?:\.\d{1,2})?|\d+)\b/g))
-        .map((m) => parseFloat(m[1].replace(/,/g, '')))
-        .filter((n) => !isNaN(n) && n > 0 && n !== 2026 && n !== 2025);
-
-      if (allNums.length > 0) {
-        // Prefer numbers that are likely price amounts (last number or single number)
-        amount = allNums[allNums.length - 1];
-      }
-    }
+  const extractedAmount = extractPKR(cleanText);
+  if (extractedAmount === null) {
+    return { status: 'error', message: 'Enter one clear positive amount in PKR, such as Rs. 1,450. For multiple amounts, use Manual Form.' };
   }
+  amount = extractedAmount;
 
   // Categorization & Merchant detection
   const lower = cleanText.toLowerCase();
@@ -207,41 +190,7 @@ function parseExpenseInput(
     }
   }
 
-  // Receipt image specific handling in PKR
-  if (image) {
-    if (/savour/i.test(cleanText) || (!cleanText && amount === 0)) {
-      if (amount === 0) amount = 2450;
-      if (merchant === 'Expense') merchant = 'Savour Foods';
-      category = 'Food & Dining';
-      notes = 'Chicken Pulao, Shami Kababs & Drinks from receipt';
-      txTime = '19:40';
-    } else if (/alfatah|al-fatah/i.test(cleanText)) {
-      if (amount === 0) amount = 8650;
-      if (merchant === 'Expense') merchant = 'Al-Fatah Store';
-      category = 'Groceries';
-      notes = 'Monthly grocery items & staples from receipt';
-      txTime = '16:15';
-    } else if (/saeed|book/i.test(cleanText)) {
-      if (amount === 0) amount = 3850;
-      if (merchant === 'Expense') merchant = 'Saeed Book Bank';
-      category = 'Shopping';
-      notes = 'Books and stationery items from receipt';
-      txTime = '15:20';
-    } else if (amount === 0) {
-      // General uploaded receipt default in PKR
-      amount = 1850;
-      merchant = 'Scanned Receipt';
-      notes = cleanText || 'Scanned purchase items';
-    }
-  }
-
-  // If still amount is 0 and no image, input is invalid expense
-  if (amount <= 0 && !image) {
-    return {
-      status: 'error',
-      message: 'Please provide a valid expense description or receipt image.',
-    };
-  }
+  if (!validDate(txDate)) return { status: 'error', message: 'Please enter a valid expense date in Manual Form.' };
 
   // Generate helpful observation in PKR
   let ai_insight = `Recorded Rs. ${amount.toLocaleString('en-PK')} under ${category}.`;
@@ -276,7 +225,11 @@ function parseExpenseInput(
 app.post('/api/parse-expense', async (req, res) => {
   try {
     const { text, image, currentDate, currentTime } = req.body;
-    const effectiveDate = currentDate || '2026-10-29';
+    if ((text !== undefined && typeof text !== 'string') ||
+        (image !== undefined && (!image || typeof image.data !== 'string' || !/^image\/(png|jpeg|webp)$/.test(image.mimeType)))) {
+      return res.status(400).json({ status: 'error', message: 'Provide text or a PNG, JPEG, or WebP receipt.' });
+    }
+    const effectiveDate = validDate(currentDate) ? currentDate : localDate();
     const effectiveTime =
       currentTime ||
       new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -288,11 +241,17 @@ app.post('/api/parse-expense', async (req, res) => {
       });
     }
 
-    // Try Gemini with safe timeout; fall back reliably
+    // Text amounts must be unambiguous even when AI is configured.
+    const textAmount = text ? extractPKR(text) : null;
+    if (!image && textAmount === null) {
+      return res.json({ status: 'error', message: 'Enter one clear positive amount in PKR, such as Rs. 1,450. For multiple amounts, use Manual Form.' });
+    }
+
+    // Receipt failures must never fall back to invented transaction details.
     if (ai) {
       try {
         const systemInstruction = `You are a personal financial assistant. Parse the expense text or receipt image.
-Currency is STRICTLY Pakistani Rupee (PKR).
+Only accept expenses explicitly in Pakistani Rupee (PKR), or with no stated currency. Reject foreign currency; do not relabel or convert it. Never invent an amount, merchant, date, or receipt details. If a receipt is unreadable or its total is ambiguous, return status error.
 Extract:
 - amount: Float number (in PKR)
 - currency: "PKR"
@@ -371,19 +330,24 @@ If cannot parse or not an expense:
           },
         });
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 3000)
-        );
-
-        const geminiResult = (await Promise.race([geminiPromise, timeoutPromise])) as any;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('timeout')), 15000);
+        });
+        let geminiResult: any;
+        try {
+          geminiResult = await Promise.race([geminiPromise, timeoutPromise]);
+        } finally {
+          clearTimeout(timeout);
+        }
         let responseText = geminiResult.text?.trim() || '';
         if (responseText.startsWith('```')) {
           responseText = responseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
         }
 
         const parsed = JSON.parse(responseText);
-        if (parsed.status === 'success' && parsed.transaction) {
-          parsed.transaction.currency = 'PKR';
+        if (parsed.status === 'success' && validParsedTransaction(parsed.transaction)) {
+          if (!image) parsed.transaction.amount = textAmount;
           if (!VALID_CATEGORIES.includes(parsed.transaction.category)) {
             parsed.transaction.category = 'Other';
           }

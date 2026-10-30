@@ -24,7 +24,7 @@ MicroLedger helps you record purchases, set a budget, and explore where your mon
 | :--- | :--- | :--- |
 | Describe a purchase in a short note. | Upload a receipt and review the extracted fields. | Explore transactions, spending, and your budget. |
 
-> The current interface also uses the name **SmartSpend**. This repository is named **MicroLedger**.
+> **MicroLedger** brings your expense records, monthly budget and regular payments into one clear view.
 
 ## Features
 
@@ -152,7 +152,7 @@ See [the architecture guide](docs/ARCHITECTURE.md#troubleshooting) for receipt, 
 | `npm start` | Start the Express server; production mode requires `NODE_ENV=production`. |
 | `npm run preview` | Preview the Vite frontend only; it does not start the expense parsing API. |
 
-A dependency lockfile is committed for repeatable installs. There is currently no automated test script.
+A dependency lockfile is committed for repeatable installs. Run `npm test` for automated financial, storage and planning regression tests.
 
 ### Serve a production build
 
@@ -169,15 +169,15 @@ npm start
 NODE_ENV=production npm start
 ```
 
-The deployment needs a Node.js server for `/api/parse-expense`; static hosting alone does not provide this endpoint. The current start command uses `tsx`, which is in `devDependencies`, so it must be available in the runtime installation.
+The deployment needs a Node.js server for `/api/parse-expense`; static hosting alone does not provide this endpoint. The start command uses `tsx`, included in runtime dependencies.
 
 ## Data and current limitations
 
 - Transactions, receipt previews, budget settings, and notifications are stored in browser `localStorage`. Clearing site data can remove them; there is no server database or account sync.
 - Smart Note and receipt extraction send the supplied text/image to the Express API. When Gemini is configured, that input may also be sent to Google for processing.
 - Currency is fixed to **PKR**; this is not a currency conversion tool.
-- The home spending total currently includes all stored transactions, even though the budget is described as monthly.
-- Some welcome text and fallback date values are fixed to October 2026.
+- The dashboard, ledger and analytics use the selected calendar month. Daily allowance divides the remaining monthly budget by calendar days remaining; planned but unlogged bills are not deducted.
+- Category limits are repeating monthly targets shared across months. Their total cannot exceed the monthly budget.
 - Gemini availability depends on the configured key and the model used in `server.ts`.
 - This repository contains a web app; an Android package and Play Store publishing workflow are not included.
 
@@ -200,3 +200,40 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks and focused pull r
 ## License
 
 No repository-level `LICENSE` file is currently included. Some source files contain Apache-2.0 headers; consult those notices and clarify repository-wide licensing with the owner before reuse.
+
+
+### Backups and recovery
+
+Open **Backups & recovery** near the bottom of any view. **Download backup** exports every month, attached receipts, budget, category limits, recurring schedules, notifications, and the last delete recovery data as a versioned JSON file. Keep a copy outside your browser.
+
+Choose **Restore backup** to preview a file, then **Confirm merge & restore**. Restore adds missing expenses and notifications, keeps current records when IDs match, and restores the backed-up budget. Repeating a restore does not duplicate records. Invalid files leave your ledger unchanged.
+
+**Undo delete** recovers the last deletion or clear-all operation, including receipts. It survives a refresh and remains available until another deletion. Backups can include those recoverable deleted records.
+
+Changes are confirmed only after browser storage succeeds. A failed expense or budget save keeps its form open for retrying. If storage is full, download a backup before freeing space. If saved data cannot be read, the app preserves it, offers a raw recovery download, and can restore a valid backup after saving a separate copy of the original data. Recovery downloads are for diagnosis; use a normal MicroLedger backup for automatic restore. Backups contain your private expense and receipt data; store them somewhere you trust.
+
+Run `npm test` for financial parsing, storage failure, migration, restore, and undo regression tests.
+
+
+### Monthly planning
+
+The Home dashboard shows month-specific spending, remaining budget (or the amount over budget), a daily allowance, and a comparison with the previous full month. Month arrows and the month picker work across all views. Comparisons use whole calendar-month totals, so an incomplete month is not a like-for-like comparison.
+
+Use **Set limits** in the category panel to divide the overall monthly budget. Blank fields remove a category limit. Lower category allocations before reducing the overall budget below their total.
+
+Use **Add recurring** for monthly rent, bills or subscriptions. Choose a first due date and planned amount. **Review payment** lets you confirm the actual amount and payment date; saving adds an expense and advances that schedule by one month in the same snapshot. Nothing is logged automatically. A due day of 31 uses the last day in shorter months, then returns to 31 when possible. Overdue occurrences advance one at a time. Pause or resume schedules as needed.
+
+Backups include category limits and recurring schedules. Restore replaces category targets with the backed-up targets, adds missing schedules, and preserves the progress of matching existing schedules. Version 1 backups created before planning features remain supported; they contain no category targets to restore.
+
+
+## Mobile release
+
+The mobile interface uses **Home**, **Activity**, **Plan**, and **Profile**. Home shows spending after unpaid scheduled bills, a real savings goal, editable quick-entry shortcuts, and the latest three expenses. Category limits, recurring schedules, goals and insights live in Plan. Export/restore and record recovery live in Profile.
+
+Quick-entry amounts are editable suggestions. Every shortcut opens a review form; nothing is saved until you confirm. Smart Note accepts English and Roman Urdu. Voice entry is available only when the browser supports its speech-recognition service and the user grants microphone permission; text entry remains available.
+
+Savings contributions record money already set aside. They do not move money or create an expense. Matching goals keep their current contributions when merging backups. The Home reservation includes outstanding monthly bill occurrences due by the selected month’s end, including overdue bills; paused rules are excluded. Closed months show recorded spending without reconstructing historical unpaid bills.
+
+Entry sheets, button feedback, save confirmation, recent entries and goal progress use short animations. Reduced-motion device settings are respected. Save success appears only after the ledger snapshot has been written successfully.
+
+Production setup: run `npm ci`, `npm test`, `npm run lint`, and `npm run build`. Start the Node server with `NODE_ENV=production npm start` (set the environment variable separately in PowerShell). Configure `PORT` and, for receipt AI, `GEMINI_API_KEY` in the hosting environment. GitHub stores the source; GitHub Pages alone cannot run the Express parsing API.

@@ -160,3 +160,20 @@ export function formatDisplayTime(timeStr?: string): string {
   }
   return timeStr;
 }
+
+export interface RecurringExpense {
+  id: string;
+  merchant: string;
+  category: ExpenseCategory;
+  amount: number;
+  nextDueDate: string;
+  dayOfMonth: number;
+  active: boolean;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target: number;
+  contributions: { id: string; amount: number; date: string }[];
+}

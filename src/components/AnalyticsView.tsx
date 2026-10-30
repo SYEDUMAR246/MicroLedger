@@ -1,4 +1,5 @@
 import React from 'react';
+import { totalPKR } from '../lib/finance';
 import {
   CATEGORIES,
   CATEGORY_META,
@@ -31,7 +32,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onOpenAddModal,
 }) => {
   // Real calculations
-  const totalSpent = transactions.reduce((acc, t) => acc + (t.amount || 0), 0);
+  const totalSpent = totalPKR(transactions);
   const transactionCount = transactions.length;
   const remainingBudget = Math.max(0, monthlyBudgetPKR - totalSpent);
   const budgetUsagePercent = monthlyBudgetPKR > 0 ? (totalSpent / monthlyBudgetPKR) * 100 : 0;

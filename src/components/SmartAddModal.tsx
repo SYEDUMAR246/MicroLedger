@@ -1,3 +1,5 @@
+import { localDate, parsePKR, validDate } from '../lib/finance';
+import { motion, useReducedMotion } from 'motion/react';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -9,6 +11,7 @@ import {
   Clock,
   Sparkles,
   FileEdit,
+  Mic,
 } from 'lucide-react';
 import {
   CATEGORIES,
@@ -23,23 +26,31 @@ import {
 import { SAMPLE_RECEIPTS, SampleReceipt } from '../data/sampleReceipts';
 
 interface SmartAddModalProps {
+  initialDraft?: TransactionData | null;
   initialMode?: 'manual' | 'text' | 'receipt';
   initialTransaction?: StoredTransaction | null;
   onSaveExpense: (
     txData: TransactionData,
     aiInsight?: string,
     receiptImage?: string
-  ) => void;
+  ) => boolean;
   onClose: () => void;
 }
 
 export const SmartAddModal: React.FC<SmartAddModalProps> = ({
   initialMode = 'manual',
+  initialDraft = null,
   initialTransaction = null,
   onSaveExpense,
   onClose,
 }) => {
   const isEditing = Boolean(initialTransaction);
+  const reducedMotion=useReducedMotion();
+  const [saved,setSaved]=useState(false);
+  const saving=useRef(false);
+  const closeTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+  const dialogRef=useRef<HTMLDivElement>(null);
+  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;const overflow=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{clearTimeout(closeTimer.current);document.body.style.overflow=overflow;previous?.focus();};},[]);
 
   // Tab order: 1. Manual Form, 2. Smart Note, 3. Scan Receipt
   const [activeTab, setActiveTab] = useState<'manual' | 'text' | 'receipt'>(
@@ -50,7 +61,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [merchant, setMerchant] = useState<string>('');
   const [category, setCategory] = useState<ExpenseCategory>('Food & Dining');
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(localDate());
   const [time, setTime] = useState<string>(getCurrentTimeFormatted());
   const [notes, setNotes] = useState<string>('');
 
@@ -68,6 +79,20 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
   const [aiTip, setAiTip] = useState<string | null>(null);
   const [extractedNotice, setExtractedNotice] = useState<string | null>(null);
 
+  const [canSpeak,setCanSpeak]=useState(false);
+  const [listening,setListening]=useState(false);
+  const speechRef=useRef<any>(null);
+  useEffect(()=>{setCanSpeak(Boolean((window as any).SpeechRecognition||(window as any).webkitSpeechRecognition));return()=>{speechRef.current?.abort();};},[]);
+  const startVoice=()=>{
+    if(listening){speechRef.current?.stop();return;}
+    const Recognition=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
+    if(!Recognition)return;
+    const recognition=new Recognition();speechRef.current=recognition;recognition.lang='en-PK';recognition.interimResults=false;
+    recognition.onstart=()=>setListening(true);recognition.onend=()=>setListening(false);
+    recognition.onresult=(event:any)=>setSmartPrompt(event.results[0][0].transcript);
+    recognition.onerror=()=>{setListening(false);setErrorMessage('Could not capture voice. Check microphone permission or type your note.');};
+    try{recognition.start();}catch{setErrorMessage('Voice is unavailable. Please type your note.');}
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Populate fields when initialTransaction is provided (Edit Mode)
@@ -90,22 +115,22 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
       }
       setActiveTab('manual');
     } else {
-      setAmount('');
-      setMerchant('');
-      setCategory('Food & Dining');
-      setDate(new Date().toISOString().split('T')[0]);
+      setAmount(initialDraft ? String(initialDraft.amount) : '');
+      setMerchant(initialDraft?.merchant ?? '');
+      setCategory(initialDraft?.category ?? 'Food & Dining');
+      setDate(initialDraft?.date ?? localDate());
       setTime(getCurrentTimeFormatted());
-      setNotes('');
+      setNotes(initialDraft?.notes ?? '');
       setAiTip(null);
       setReceiptImage(null);
       setActiveTab(initialMode || 'manual');
     }
-  }, [initialTransaction, initialMode]);
+  }, [initialTransaction, initialMode, initialDraft]);
 
   // Quick Pakistani Expense Suggestions for Smart Note
   const quickSuggestions = [
     'Lunch at KFC Rs. 1,450',
-    'Petrol 3000',
+    'Aaj petrol pe 1500 kharch hue',
     'Groceries from Imtiaz 5500',
     'Dinner at Savour Foods 2200',
     'Careem ride to office 480',
@@ -161,7 +186,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
 
     try {
       const payload: any = {
-        currentDate: date || new Date().toISOString().split('T')[0],
+        currentDate: date || localDate(),
         currentTime: time || getCurrentTimeFormatted(),
       };
       if (smartPrompt.trim()) payload.text = smartPrompt.trim();
@@ -185,7 +210,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
         setAmount(data.transaction.amount > 0 ? data.transaction.amount.toString() : '');
         setMerchant(data.transaction.merchant || '');
         setCategory(data.transaction.category || 'Food & Dining');
-        setDate(data.transaction.date || new Date().toISOString().split('T')[0]);
+        setDate(data.transaction.date || localDate());
         setTime(data.transaction.time || getCurrentTimeFormatted());
         setNotes(data.transaction.notes || '');
         setAiTip(data.ai_insight || null);
@@ -208,16 +233,23 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
 
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    if(saving.current)return;
+    const parsedAmount = parsePKR(amount);
+    if (parsedAmount === null) {
       setErrorMessage('Please enter a valid expense amount in PKR.');
+      return;
+    }
+
+    if (!validDate(date)) {
+      setErrorMessage('Please enter a valid expense date.');
       return;
     }
 
     // Merchant store name is OPTIONAL: fallback to Category Name
     const finalMerchant = merchant.trim() || `${category} Expense`;
 
-    onSaveExpense(
+    saving.current=true;
+    const didSave = onSaveExpense(
       {
         amount: parsedAmount,
         currency: 'PKR',
@@ -230,16 +262,26 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
       aiTip || undefined,
       receiptImage?.preview
     );
-    onClose();
+    if (!didSave) {
+      saving.current=false;
+      setErrorMessage('Could not save. Your form is still here. Allow site storage or free storage space, then retry. If another tab changed the ledger, copy your form details before reloading.');
+      return;
+    }
+    setSaved(true);
+    closeTimer.current=setTimeout(onClose,reducedMotion?200:650);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[92vh]">
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:reducedMotion?0:.18}} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/45 backdrop-blur-[2px] sm:p-4">
+      <motion.div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="expense-dialog-title" tabIndex={-1} initial={reducedMotion?false:{y:'100%'}} animate={{y:0}} exit={reducedMotion?{opacity:0}:{y:'100%'}} transition={{duration:reducedMotion?0:.26,ease:[.22,.8,.25,1]}} className="bg-[#fffdf9] rounded-t-[28px] sm:rounded-[28px] max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92dvh] pb-[env(safe-area-inset-bottom)]" onKeyDown={event=>{
+        if(event.key==='Escape'&&!saving.current){onClose();return;}
+        if(event.key==='Tab'){const elements=dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])');const visible=Array.from(elements??[]).filter(element=>element.getClientRects().length>0);const first=visible[0],last=visible[visible.length-1];if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialogRef.current)){last?.focus();event.preventDefault();}else if(!event.shiftKey&&document.activeElement===last){first?.focus();event.preventDefault();}}
+      }}>
+        <div className="w-9 h-1 rounded-full bg-slate-200 mx-auto mt-3 sm:hidden"/>
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+            <h2 id="expense-dialog-title" className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
               {isEditing ? 'Edit Expense' : 'Add New Expense'}
             </h2>
             <p className="text-xs text-slate-400">
@@ -250,6 +292,8 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
           </div>
           <button
             type="button"
+            aria-label="Close expense form"
+            disabled={saved}
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
           >
@@ -274,7 +318,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Manual Form
+                Manual
               </button>
 
               {/* Tab 2: Smart Note */}
@@ -290,7 +334,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Smart Note
+                Type
               </button>
 
               {/* Tab 3: Scan Receipt */}
@@ -306,7 +350,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Scan Receipt
+                Scan
               </button>
             </div>
           </div>
@@ -315,7 +359,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto space-y-4">
           {errorMessage && (
-            <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl flex items-start gap-2">
+            <div role="alert" className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
@@ -351,8 +395,9 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                   </span>
                   <input
                     type="number"
-                    step="1"
-                    min="1"
+                    aria-label="Expense amount in PKR"
+                    step="0.01"
+                    min="0.01"
                     required
                     autoFocus={!isEditing}
                     placeholder="0"
@@ -376,6 +421,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                 </div>
                 <input
                   type="text"
+                  aria-label="Merchant or store name"
                   placeholder="e.g. Savour Foods, Imtiaz, Careem (or leave empty)"
                   value={merchant}
                   onChange={(e) => setMerchant(e.target.value)}
@@ -386,7 +432,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
               {/* Category */}
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Category</label>
-                <select
+                <select aria-label="Expense category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-medium focus:outline-none focus:border-orange-500 focus:bg-white cursor-pointer"
@@ -404,7 +450,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">Date</label>
                   <input
-                    type="date"
+                    type="date" aria-label="Expense date"
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
@@ -415,7 +461,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                   <label className="text-xs font-bold text-slate-700 block mb-1">Time</label>
                   <div className="relative">
                     <input
-                      type="time"
+                      type="time" aria-label="Expense time"
                       required
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
@@ -432,6 +478,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  aria-label="Expense notes"
                   placeholder="e.g. Lunch with team or monthly groceries"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -442,11 +489,11 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
               {/* Submit Button */}
               <div className="pt-2">
                 <button
-                  type="submit"
+                  type="submit" disabled={saved}
                   className="w-full py-3 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>{isEditing ? 'Update Expense' : 'Save Expense'}</span>
+                  <motion.span key={saved?"saved":"idle"} initial={false} animate={{scale:saved?[.7,1.15,1]:1}} transition={{duration:reducedMotion?0:.25}}><Check className="w-4 h-4 stroke-[2.5]" /></motion.span>
+                  <span>{saved ? 'Saved!' : isEditing ? 'Update Expense' : 'Save Expense'}</span>
                 </button>
               </div>
             </form>
@@ -457,10 +504,10 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                  Describe what you spent
+                  Describe what you spent · English or Roman Urdu
                 </label>
                 <div className="relative">
-                  <textarea
+                  <textarea aria-label="Expense description in English or Roman Urdu" autoFocus
                     rows={3}
                     value={smartPrompt}
                     onChange={(e) => setSmartPrompt(e.target.value)}
@@ -470,6 +517,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                 </div>
               </div>
 
+              {canSpeak&&<div className="flex items-center gap-3"><button type="button" onClick={startVoice} aria-pressed={listening} className="rounded-xl bg-orange-50 text-orange-800 px-3 py-2 text-sm font-semibold flex items-center gap-2"><Mic className="w-4 h-4"/>{listening?'Stop listening':'Use voice'}</button><p className="text-[11px] text-slate-500 flex-1">Uses your browser’s speech service. Review the transcript before saving.</p></div>}
               {/* Quick suggestions pills */}
               <div>
                 <span className="text-[11px] font-semibold text-slate-400 block mb-1.5">
@@ -602,7 +650,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

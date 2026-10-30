@@ -1,6 +1,6 @@
 {
-  "name": "SmartSpend AI - Intelligent Expense Tracker",
-  "description": "Parse unstructured text descriptions and receipt images into structured expense data with AI financial insights.",
+  "name": "MicroLedger — Your money, in perspective.",
+  "description": "Track expenses in PKR, plan category budgets, manage recurring payments and keep a clear view of every month.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,0 +1,17 @@
+# Full MicroLedger app, including local receipt OCR.
+# Render builds and runs this service directly from GitHub.
+services:
+  - type: web
+    name: microledger
+    runtime: node
+    plan: free
+    repo: https://github.com/SYEDUMAR246/MicroLedger
+    branch: main
+    buildCommand: npm ci --include=dev && npm run lint && npm test && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22.22.0"

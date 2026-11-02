@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
@@ -46,7 +47,7 @@ test('invalid AI transaction values cannot pass validation', () => {
   }
 });
 
-test('API fails closed on receipts without AI and validates text amounts', {timeout:30000}, async () => {
+test('API reads real receipt pixels without AI, rejects invalid images and validates text amounts', {timeout:60000}, async () => {
   const reservation = createServer();
   await new Promise<void>(resolve => reservation.listen(0,'127.0.0.1',resolve));
   const port = (reservation.address() as {port:number}).port;
@@ -68,6 +69,8 @@ test('API fails closed on receipts without AI and validates text amounts', {time
       assert.equal(receipt.status,'error');
       assert.equal(receipt.transaction,undefined);
     }
+    const scanned=await post({image:{mimeType:'image/png',data:readFileSync('tests/fixtures/receipt.png').toString('base64')},currentDate:'2026-11-02'});
+    assert.equal(scanned.status,'success',scanned.message);assert.equal(scanned.transaction.amount,2450);assert.equal(scanned.transaction.date,'2026-10-28');
     const lunch = await post({text:'Lunch at KFC Rs. 1,450',currentDate:'2026-10-29',currentTime:'14:30'});
     assert.equal(lunch.transaction.amount,1450);
     assert.equal(lunch.transaction.date,'2026-10-29');

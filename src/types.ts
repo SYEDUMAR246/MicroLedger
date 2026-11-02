@@ -7,7 +7,8 @@ export type ExpenseCategory =
   | 'Shopping'
   | 'Healthcare'
   | 'Travel'
-  | 'Other';
+  | 'Other'
+  | (string & {});
 
 export interface TransactionData {
   amount: number;
@@ -177,3 +178,5 @@ export interface SavingsGoal {
   target: number;
   contributions: { id: string; amount: number; date: string }[];
 }
+
+export interface ProfileSettings { name: string; theme: 'light' | 'dark' | 'system'; reduceMotion: boolean; }

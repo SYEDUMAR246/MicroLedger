@@ -1,3 +1,4 @@
+import { categoriesFor } from '../lib/settings';
 import React from 'react';
 import { totalPKR } from '../lib/finance';
 import {
@@ -21,16 +22,19 @@ import {
 } from 'lucide-react';
 
 interface AnalyticsViewProps {
+  customCategories?: string[];
   transactions: StoredTransaction[];
   monthlyBudgetPKR: number;
   onOpenAddModal?: () => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
+  customCategories = [],
   transactions,
   monthlyBudgetPKR,
   onOpenAddModal,
 }) => {
+  const categories=categoriesFor(customCategories);
   // Real calculations
   const totalSpent = totalPKR(transactions);
   const transactionCount = transactions.length;
@@ -46,10 +50,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const categoryMap: Record<
     ExpenseCategory,
     { total: number; count: number }
-  > = CATEGORIES.reduce((acc, cat) => {
+  > = categories.reduce((acc, cat) => {
     acc[cat] = { total: 0, count: 0 };
     return acc;
-  }, {} as Record<ExpenseCategory, { total: number; count: number }>);
+  }, Object.create(null) as Record<ExpenseCategory, { total: number; count: number }>);
 
   transactions.forEach((tx) => {
     if (categoryMap[tx.category]) {
@@ -58,12 +62,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     }
   });
 
-  const activeCategories = CATEGORIES.map((cat) => ({
+  const activeCategories = categories.map((cat) => ({
     category: cat,
     total: categoryMap[cat].total,
     count: categoryMap[cat].count,
     percentage: totalSpent > 0 ? Math.round((categoryMap[cat].total / totalSpent) * 100) : 0,
-    meta: CATEGORY_META[cat],
+    meta: CATEGORY_META[cat]??CATEGORY_META.Other,
   }))
     .filter((c) => c.total > 0)
     .sort((a, b) => b.total - a.total);
@@ -83,7 +87,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const dailyAverageSpend = uniqueDaysCount > 0 ? totalSpent / uniqueDaysCount : 0;
 
   // Top Merchants
-  const merchantMap: Record<string, { total: number; count: number; category: ExpenseCategory }> = {};
+  const merchantMap: Record<string, { total: number; count: number; category: ExpenseCategory }> = Object.create(null);
   transactions.forEach((tx) => {
     const name = tx.merchant || tx.category;
     if (!merchantMap[name]) {

@@ -1,11 +1,13 @@
+import { categoriesFor } from '../lib/settings';
 import React, { useState } from 'react';
-import { Repeat2 } from 'lucide-react';
+import { Repeat2,Trash2 } from 'lucide-react';
 import { CATEGORIES, formatPKR, type ExpenseCategory, type RecurringExpense } from '../types';
 import { localDate, parsePKR, validDate } from '../lib/finance';
 import { recurringTotal } from '../lib/planning';
 
-interface Props { rules:RecurringExpense[]; onSave:(rule:RecurringExpense)=>boolean; onToggle:(id:string)=>boolean; onPay:(id:string,due:string,date:string,amount:number)=>boolean }
-export function RecurringPanel({rules,onSave,onToggle,onPay}:Props) {
+interface Props { onDelete:(id:string)=>void; customCategories?:string[]; rules:RecurringExpense[]; onSave:(rule:RecurringExpense)=>boolean; onToggle:(id:string)=>boolean; onPay:(id:string,due:string,date:string,amount:number)=>boolean }
+export function RecurringPanel({rules,onSave,onToggle,onPay,onDelete,customCategories=[]}:Props) {
+  const categories=categoriesFor(customCategories);
   const [adding,setAdding] = useState(false);
   const [merchant,setMerchant] = useState('');
   const [amount,setAmount] = useState('');
@@ -27,14 +29,14 @@ export function RecurringPanel({rules,onSave,onToggle,onPay}:Props) {
     }}>
       <label className="block text-xs font-medium text-slate-600" htmlFor="recurring-name">Payment name<input id="recurring-name" value={merchant} maxLength={100} onChange={event=>setMerchant(event.target.value)} placeholder="Rent, internet or a subscription" className={inputClass}/></label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><label className="text-xs text-slate-600" htmlFor="recurring-amount">Monthly amount (PKR)<input id="recurring-amount" inputMode="decimal" value={amount} onChange={event=>setAmount(event.target.value)} className={inputClass}/></label><label className="text-xs text-slate-600" htmlFor="recurring-due">First due date<input id="recurring-due" type="date" value={due} onChange={event=>setDue(event.target.value)} className={inputClass}/></label></div>
-      <label className="block text-xs text-slate-600" htmlFor="recurring-category">Payment category<select id="recurring-category" value={category} onChange={event=>setCategory(event.target.value as ExpenseCategory)} className={inputClass}>{CATEGORIES.map(item=><option key={item}>{item}</option>)}</select></label>
+      <label className="block text-xs text-slate-600" htmlFor="recurring-category">Payment category<select id="recurring-category" value={category} onChange={event=>setCategory(event.target.value as ExpenseCategory)} className={inputClass}>{categories.map(item=><option key={item}>{item}</option>)}</select></label>
       <div className="flex gap-3"><button type="submit" className="bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-xl">Save recurring payment</button><button type="button" className="text-xs text-slate-500" onClick={()=>{setAdding(false);setError(null);}}>Cancel</button></div>
     </form>}
     {!rules.length && !adding && <p className="mt-4 text-sm text-slate-500 leading-relaxed">Keep rent, subscriptions and bills in sight. Nothing is added to your expenses until you confirm a payment.</p>}
     <div className="mt-4 space-y-3">{[...rules].sort((a,b)=>Number(b.active)-Number(a.active) || a.nextDueDate.localeCompare(b.nextDueDate)).map(rule=><div key={rule.id} className="rounded-2xl border border-slate-100 p-3.5">
       <div className="flex justify-between gap-3"><div className="min-w-0"><h3 className="text-sm font-semibold text-slate-800 break-words">{rule.merchant}</h3><p className="text-xs text-slate-500 mt-1">{rule.category} · {rule.active ? (rule.nextDueDate < localDate() ? 'Overdue ' : 'Due ') + rule.nextDueDate : 'Paused'}</p></div><span className="text-sm font-bold shrink-0">{formatPKR(rule.amount)}</span></div>
       <div className="flex gap-4 mt-3">{rule.active && <button type="button" className="text-xs font-semibold text-orange-700" aria-label={'Review payment for ' + rule.merchant} onClick={()=>{setPayment({id:rule.id,due:rule.nextDueDate,date:localDate(),amount:String(rule.amount)});setError(null);}}>Review payment</button>}
-      <button type="button" className="text-xs text-slate-500" aria-label={(rule.active ? 'Pause ' : 'Resume ') + rule.merchant} onClick={()=>{if (!onToggle(rule.id)) setError('Could not update this schedule. Please retry.');else if (payment?.id === rule.id) setPayment(null);}}>{rule.active ? 'Pause' : 'Resume'}</button></div>
+      <button type="button" className="text-xs text-slate-500" aria-label={(rule.active ? 'Pause ' : 'Resume ') + rule.merchant} onClick={()=>{if (!onToggle(rule.id)) setError('Could not update this schedule. Please retry.');else if (payment?.id === rule.id) setPayment(null);}}>{rule.active ? 'Pause' : 'Resume'}</button><button type="button" className="pp-delete-item" aria-label={"Delete bill "+rule.merchant} onClick={()=>onDelete(rule.id)}><Trash2 size={13}/>Delete</button></div>
       {payment?.id === rule.id && <form className="mt-4 border-t border-slate-100 pt-3 space-y-3" onSubmit={event=>{
         event.preventDefault();const parsed=parsePKR(payment.amount);
         if(parsed===null || !validDate(payment.date)){setError('Enter a valid amount and payment date.');return;}

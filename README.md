@@ -26,6 +26,8 @@ MicroLedger helps you record purchases, set a budget, and explore where your mon
 
 > **MicroLedger** brings your expense records, monthly budget and regular payments into one clear view.
 
+Latest update: [Paper & Peach, personalized setup and local OCR](docs/RELEASE-2026-11-02.md).
+
 ## Features
 
 | Feature | What you can do |
@@ -44,7 +46,7 @@ Categories include Food & Dining, Groceries, Transportation, Entertainment, Util
 
 You need **Git**, **Node.js 22.12+ (or a newer supported release)**, and **npm**. Check your installation with `node --version` and `npm --version`.
 
-A Gemini API key is optional for getting started with manual entry. Smart parsing attempts Gemini when a key is configured.
+No AI key is required. Type runs in the browser, and Scan uses local Tesseract OCR on the Express server with bundled English language data.
 
 ### 1. Clone into a folder you own
 
@@ -74,7 +76,7 @@ The committed lockfile pins dependency versions. `npm ci` installs from it and r
 
 ### 2. Create your local configuration
 
-These commands create `.env` only if it does not already exist, preserving any API key you have configured.
+These commands create `.env` only if it does not already exist, preserving your local configuration.
 
 **PowerShell**
 
@@ -88,11 +90,10 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 test -f .env || cp .env.example .env
 ```
 
-Set `GEMINI_API_KEY` in `.env` if you want to use Gemini. Keep your real key out of commits and issue reports. In AI Studio, the key can be provided through its Secrets panel.
+No external OCR account is required. A legacy GEMINI_API_KEY setting is not used by the current parser.
 
 | Variable | Purpose |
 | --- | --- |
-| `GEMINI_API_KEY` | Enables Gemini parsing when a non-placeholder key is provided. |
 | `PORT` | Server port; defaults to `3000`. |
 | `NODE_ENV` | Set to `production` to serve the built frontend. |
 | `DISABLE_HMR` | Set to `true` to disable Vite hot reload/file watching. |
@@ -135,12 +136,12 @@ See [the architecture guide](docs/ARCHITECTURE.md#troubleshooting) for receipt, 
 ## Try your first expense
 
 1. Open **Add New Expense**.
-2. Use **Manual Form**, or select **Smart Note** and enter `Dinner at Savour Foods 1450`.
+2. Use **Manual**, or select **Type** and enter `Dinner at Savour Foods 1450`.
 3. For a smart note or receipt, request extraction.
 4. Review the amount, merchant, category, date, and time.
 5. Save the expense and check the expense list and analytics.
 
-**Always review extracted values.** If Gemini is unavailable, fails, or exceeds the server's three-second timeout, the server falls back to a rule-based parser. Its receipt handling can return hard-coded sample values; it does not perform OCR on the uploaded image. A successful fallback response is not proof that a receipt was read accurately.
+**Always review extracted values.** Type accepts one clear PKR amount per note. Scan reads PNG, JPEG or WebP receipt pixels and accepts an explicitly labelled final total; missing, conflicting, foreign-currency or unreadable totals produce an error instead of a guessed expense. English printed receipts are supported; image quality affects recognition.
 
 ## Development commands
 
@@ -174,11 +175,11 @@ The deployment needs a Node.js server for `/api/parse-expense`; static hosting a
 ## Data and current limitations
 
 - Transactions, receipt previews, budget settings, and notifications are stored in browser `localStorage`. Clearing site data can remove them; there is no server database or account sync.
-- Smart Note and receipt extraction send the supplied text/image to the Express API. When Gemini is configured, that input may also be sent to Google for processing.
+- Type stays in your browser. Receipt images go to your app’s Express server for local OCR; the parser does not send them to an external AI service.
 - Currency is fixed to **PKR**; this is not a currency conversion tool.
 - The dashboard, ledger and analytics use the selected calendar month. Daily allowance divides the remaining monthly budget by calendar days remaining; planned but unlogged bills are not deducted.
 - Category limits are repeating monthly targets shared across months. Their total cannot exceed the monthly budget.
-- Gemini availability depends on the configured key and the model used in `server.ts`.
+- Scan needs the Express server running; Type also works without the parsing API.
 - This repository contains a web app; an Android package and Play Store publishing workflow are not included.
 
 ## Project guide
@@ -204,11 +205,11 @@ No repository-level `LICENSE` file is currently included. Some source files cont
 
 ### Backups and recovery
 
-Open **Backups & recovery** near the bottom of any view. **Download backup** exports every month, attached receipts, budget, category limits, recurring schedules, notifications, and the last delete recovery data as a versioned JSON file. Keep a copy outside your browser.
+Open **Profile → Backups & recovery**. **Download backup** exports every month, attached receipts, budget, category limits, recurring schedules, notifications, and the last delete recovery data as a versioned JSON file. Keep a copy outside your browser.
 
 Choose **Restore backup** to preview a file, then **Confirm merge & restore**. Restore adds missing expenses and notifications, keeps current records when IDs match, and restores the backed-up budget. Repeating a restore does not duplicate records. Invalid files leave your ledger unchanged.
 
-**Undo delete** recovers the last deletion or clear-all operation, including receipts. It survives a refresh and remains available until another deletion. Backups can include those recoverable deleted records.
+**Undo delete** recovers the last deletion or clear-all operation, including receipts. It is available for five seconds and survives refresh only within that deadline. Backups can include those recoverable deleted records.
 
 Changes are confirmed only after browser storage succeeds. A failed expense or budget save keeps its form open for retrying. If storage is full, download a backup before freeing space. If saved data cannot be read, the app preserves it, offers a raw recovery download, and can restore a valid backup after saving a separate copy of the original data. Recovery downloads are for diagnosis; use a normal MicroLedger backup for automatic restore. Backups contain your private expense and receipt data; store them somewhere you trust.
 
@@ -217,7 +218,7 @@ Run `npm test` for financial parsing, storage failure, migration, restore, and u
 
 ### Monthly planning
 
-The Home dashboard shows month-specific spending, remaining budget (or the amount over budget), a daily allowance, and a comparison with the previous full month. Month arrows and the month picker work across all views. Comparisons use whole calendar-month totals, so an incomplete month is not a like-for-like comparison.
+Today shows the current calendar month’s remaining spending budget, today’s total and recent moments. Scheduled bills appear separately as upcoming or overdue; they become expenses only after a payment is confirmed. Activity and Plan have month controls.
 
 Use **Set limits** in the category panel to divide the overall monthly budget. Blank fields remove a category limit. Lower category allocations before reducing the overall budget below their total.
 
@@ -228,12 +229,17 @@ Backups include category limits and recurring schedules. Restore replaces catego
 
 ## Mobile release
 
-The mobile interface uses **Home**, **Activity**, **Plan**, and **Profile**. Home shows spending after unpaid scheduled bills, a real savings goal, editable quick-entry shortcuts, and the latest three expenses. Category limits, recurring schedules, goals and insights live in Plan. Export/restore and record recovery live in Profile.
+The mobile interface uses **Today**, **Activity**, **Goals** and **Plan**, with a centered **+** for expense entry. Open **Profile** from the avatar. Profile contains personalization, companion controls, setup, custom categories, backups and record management.
 
-Quick-entry amounts are editable suggestions. Every shortcut opens a review form; nothing is saved until you confirm. Smart Note accepts English and Roman Urdu. Voice entry is available only when the browser supports its speech-recognition service and the user grants microphone permission; text entry remains available.
+Type accepts English and Roman Urdu notes and opens editable review fields. Scan reads an uploaded receipt through the Node OCR API. Voice entry uses the browser’s speech-recognition service when supported and permitted. Nothing is saved until the user confirms.
 
-Savings contributions record money already set aside. They do not move money or create an expense. Matching goals keep their current contributions when merging backups. The Home reservation includes outstanding monthly bill occurrences due by the selected month’s end, including overdue bills; paused rules are excluded. Closed months show recorded spending without reconstructing historical unpaid bills.
+Savings contributions record money already set aside. They do not move money or create an expense. Matching goals keep their current contributions when merging backups. Home shows bills separately from recorded spending; paused schedules are excluded from the upcoming bill card.
 
 Entry sheets, button feedback, save confirmation, recent entries and goal progress use short animations. Reduced-motion device settings are respected. Save success appears only after the ledger snapshot has been written successfully.
 
-Production setup: run `npm ci`, `npm test`, `npm run lint`, and `npm run build`. Start the Node server with `NODE_ENV=production npm start` (set the environment variable separately in PowerShell). Configure `PORT` and, for receipt AI, `GEMINI_API_KEY` in the hosting environment. GitHub stores the source; GitHub Pages alone cannot run the Express parsing API.
+Production setup: run `npm ci`, `npm test`, `npm run lint`, and `npm run build`. Start the Node server with `NODE_ENV=production npm start` (set the environment variable separately in PowerShell). Configure `PORT` in the hosting environment. OCR language data is installed with npm dependencies. GitHub stores the source; GitHub Pages alone cannot run the Express parsing API.
+
+
+### Companion expressions
+
+Sprout, cat and cloud companions blink and react with happy, winking, celebrating, thinking and concerned expressions. Tap the home companion to play; preview expressions in Profile. Receipt reading shows a thinking expression, errors show concern and extracted details trigger celebration. Both the in-app Reduce animations setting and the device reduced-motion preference stop mascot motion.

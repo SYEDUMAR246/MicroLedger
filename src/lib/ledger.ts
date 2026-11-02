@@ -1,9 +1,18 @@
+import {validMascot,type MascotSettings} from './personalization';
 import { CATEGORIES, type AppNotification, type StoredTransaction, type ExpenseCategory, type RecurringExpense, type SavingsGoal } from '../types';
+import { categoriesFor, validCategoryName } from './settings';
+import type { PendingDeletion } from './deletion';
+import type { ProfileSettings } from '../types';
 import { parsePKR, validDate, validParsedTransaction } from './finance';
 
 export const LEDGER_KEY = 'microledger_snapshot_v1';
 export const LEGACY_KEYS = ['smartspend_wallet_pkr_v3', 'smartspend_wallet_budget_v3', 'smartspend_notifications_v3'] as const;
 export interface Ledger {
+  mascot?: MascotSettings;
+  onboardingCompleted?: boolean;
+  profile?: ProfileSettings;
+  customCategories?: string[];
+  deletion?: PendingDeletion;
   goals?: SavingsGoal[];
   categoryBudgets?: Partial<Record<ExpenseCategory, number>>;
   recurring?: RecurringExpense[];
@@ -19,9 +28,9 @@ export function emptyLedger(): Ledger {
   return { transactions: [], monthlyBudgetPKR: 120000, notifications: [], undo: [] };
 }
 
-function transaction(value: any): value is StoredTransaction {
+function transaction(value: any, categories: string[] = CATEGORIES): value is StoredTransaction {
   return validParsedTransaction(value) && typeof value.id === 'string' && value.id.length > 0 &&
-    Number.isFinite(value.createdAt) && typeof value.notes === 'string' && CATEGORIES.includes(value.category) &&
+    Number.isFinite(value.createdAt) && typeof value.notes === 'string' && categories.includes(value.category) &&
     ['manual', 'ai_text', 'ai_receipt'].includes(value.source) &&
     (value.aiInsight === undefined || typeof value.aiInsight === 'string') &&
     (value.receiptImage === undefined || (typeof value.receiptImage === 'string' && (value.receiptImage === '' || /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/.test(value.receiptImage))));
@@ -38,6 +47,19 @@ function uniqueIds(values: {id: string}[]): boolean {
 }
 
 export function validateLedger(value: any): asserts value is Ledger {
+  if(value?.mascot!==undefined&&!validMascot(value.mascot))throw new Error('Invalid companion customization.');
+  if(value?.onboardingCompleted!==undefined&&typeof value.onboardingCompleted!=='boolean')throw new Error('Invalid setup state.');
+  if(value?.customCategories!==undefined && (!Array.isArray(value.customCategories)||!value.customCategories.every(validCategoryName)||new Set([...CATEGORIES,...value.customCategories].map((name:string)=>name.toLocaleLowerCase())).size!==CATEGORIES.length+value.customCategories.length))throw new Error('Custom categories contain invalid or duplicate names.');
+  const categories=categoriesFor(value?.customCategories);
+  if(value?.profile!==undefined && (!value.profile||typeof value.profile.name!=='string'||value.profile.name.length>50||!['light','dark','system'].includes(value.profile.theme)||typeof value.profile.reduceMotion!=='boolean'))throw new Error('Invalid profile settings.');
+  if(value?.deletion!==undefined){
+    const deletion=value.deletion;
+    if(!deletion||!['expenses','bill','goal'].includes(deletion.kind)||typeof deletion.label!=='string'||deletion.label.length>140||!Number.isFinite(deletion.expiresAt)||deletion.expiresAt<0)throw new Error('Invalid deletion recovery data.');
+    if(deletion.kind==='bill'||deletion.kind==='goal'){
+      if(!Number.isInteger(deletion.index)||deletion.index<0)throw new Error('Invalid deletion recovery position.');
+      validateLedger({...value,deletion:undefined,...(deletion.kind==='bill'?{recurring:[deletion.value]}:{goals:[deletion.value]})});
+    }
+  }
   if (value?.goals !== undefined && (!Array.isArray(value.goals) || !uniqueIds(value.goals) || !value.goals.every((goal:any) =>
     goal && typeof goal.id === 'string' && goal.id.length > 0 && typeof goal.name === 'string' && goal.name.trim().length > 0 &&
     typeof goal.target === 'number' && parsePKR(String(goal.target)) !== null && Array.isArray(goal.contributions) && uniqueIds(goal.contributions) &&
@@ -46,20 +68,20 @@ export function validateLedger(value: any): asserts value is Ledger {
     throw new Error('This ledger contains invalid savings goals or contributions.');
   }
   if (value?.categoryBudgets !== undefined && (!value.categoryBudgets || Array.isArray(value.categoryBudgets) || typeof value.categoryBudgets !== 'object' ||
-    !Object.entries(value.categoryBudgets).every(([category, amount]) => CATEGORIES.includes(category as ExpenseCategory) && typeof amount === 'number' && parsePKR(String(amount)) !== null) ||
+    !Object.entries(value.categoryBudgets).every(([category, amount]) => categories.includes(category as ExpenseCategory) && typeof amount === 'number' && parsePKR(String(amount)) !== null) ||
     Object.values(value.categoryBudgets).reduce((sum: number, amount: any) => sum + Math.round(amount * 100), 0) > Math.round(value.monthlyBudgetPKR * 100))) {
     throw new Error('Category budgets must be positive and fit within your monthly budget.');
   }
   if (value?.recurring !== undefined && (!Array.isArray(value.recurring) || !value.recurring.every((rule: any) =>
     rule && typeof rule.id === 'string' && rule.id.length > 0 && typeof rule.merchant === 'string' && rule.merchant.trim().length > 0 &&
-    CATEGORIES.includes(rule.category) && typeof rule.amount === 'number' && parsePKR(String(rule.amount)) !== null && validDate(rule.nextDueDate) &&
+    categories.includes(rule.category) && typeof rule.amount === 'number' && parsePKR(String(rule.amount)) !== null && validDate(rule.nextDueDate) &&
     Number.isInteger(rule.dayOfMonth) && rule.dayOfMonth >= 1 && rule.dayOfMonth <= 31 && typeof rule.active === 'boolean') || !uniqueIds(value.recurring))) {
     throw new Error('This ledger contains invalid or duplicate recurring schedules.');
   }
-  if (!value || !Array.isArray(value.transactions) || !value.transactions.every(transaction) || !uniqueIds(value.transactions) ||
+  if (!value || !Array.isArray(value.transactions) || !value.transactions.every((tx:any)=>transaction(tx,categories)) || !uniqueIds(value.transactions) ||
     typeof value.monthlyBudgetPKR !== 'number' || parsePKR(String(value.monthlyBudgetPKR)) === null ||
     !Array.isArray(value.notifications) || !value.notifications.every(notification) || !uniqueIds(value.notifications) ||
-    !Array.isArray(value.undo) || !value.undo.every((entry: any) => entry && transaction(entry.transaction) && Number.isInteger(entry.index) && entry.index >= 0) ||
+    !Array.isArray(value.undo) || !value.undo.every((entry: any) => entry && transaction(entry.transaction,categories) && Number.isInteger(entry.index) && entry.index >= 0) ||
     !uniqueIds(value.undo.map((entry: any) => entry.transaction))) {
     throw new Error('This ledger contains invalid or duplicate records. Your current records have not been changed.');
   }
@@ -112,20 +134,28 @@ export function parseBackup(text: string): Backup {
 export function mergeBackup(current: Ledger, backup: Backup): Ledger {
   validateLedger(current);
   validateLedger(backup.ledger);
+  const customCategories=[...(current.customCategories??[])];
+  for(const category of backup.ledger.customCategories??[])if(!categoriesFor(customCategories).some(name=>name.toLocaleLowerCase()===category.toLocaleLowerCase()))customCategories.push(category);
+  const canonical=(category:string)=>categoriesFor(customCategories).find(name=>name.toLocaleLowerCase()===category.toLocaleLowerCase())??category;
   const ids = new Set(current.transactions.map(tx => tx.id));
   const goalIds = new Set((current.goals ?? []).map(goal => goal.id));
   const recurringIds = new Set((current.recurring ?? []).map(rule => rule.id));
   const notificationIds = new Set(current.notifications.map(item => item.id));
   return {
-    transactions: [...current.transactions, ...backup.ledger.transactions.filter(tx => !ids.has(tx.id))],
+    ...((current.mascot||backup.ledger.mascot)?{mascot:current.mascot??backup.ledger.mascot}:{}),
+    ...((current.onboardingCompleted!==undefined||backup.ledger.onboardingCompleted!==undefined)?{onboardingCompleted:current.onboardingCompleted??backup.ledger.onboardingCompleted}:{}),
+    transactions: [...current.transactions, ...backup.ledger.transactions.filter(tx => !ids.has(tx.id)).map(tx=>({...tx,category:canonical(tx.category)}))],
     monthlyBudgetPKR: backup.ledger.monthlyBudgetPKR,
+    ...((current.customCategories||backup.ledger.customCategories)?{customCategories}:{}),
+    ...((current.profile||backup.ledger.profile)?{profile:current.profile??backup.ledger.profile}:{}),
+    ...(current.deletion?{deletion:current.deletion}:{}),
     ...((backup.ledger.goals || current.goals) ? {goals:[...(current.goals ?? []),...(backup.ledger.goals ?? []).filter(goal => !goalIds.has(goal.id))]} : {}),
-    ...((backup.ledger.categoryBudgets || current.categoryBudgets) ? {categoryBudgets: backup.ledger.categoryBudgets ?? {}} : {}),
-    ...((backup.ledger.recurring || current.recurring) ? {recurring: [...(current.recurring ?? []), ...(backup.ledger.recurring ?? []).filter(rule => !recurringIds.has(rule.id))]} : {}),
+    ...((backup.ledger.categoryBudgets || current.categoryBudgets) ? {categoryBudgets: Object.fromEntries(Object.entries(backup.ledger.categoryBudgets??{}).map(([category,amount])=>[canonical(category),amount]))} : {}),
+    ...((backup.ledger.recurring || current.recurring) ? {recurring: [...(current.recurring ?? []), ...(backup.ledger.recurring ?? []).filter(rule => !recurringIds.has(rule.id)).map(rule=>({...rule,category:canonical(rule.category)}))]} : {}),
     notifications: [...current.notifications, ...backup.ledger.notifications.filter(item => !notificationIds.has(item.id))],
     undo: current.undo.length > 0 ? current.undo : backup.ledger.undo.filter(entry =>
       !current.transactions.some(tx => tx.id === entry.transaction.id) &&
-      !backup.ledger.transactions.some(tx => tx.id === entry.transaction.id)),
+      !backup.ledger.transactions.some(tx => tx.id === entry.transaction.id)).map(entry=>({...entry,transaction:{...entry.transaction,category:canonical(entry.transaction.category)}})),
   };
 }
 

@@ -22,7 +22,7 @@ export function BackupPanel({ledger, onRestore, exportDisabled}: {ledger: Ledger
   const added = preview ? mergeBackup(ledger, preview).transactions.length - ledger.transactions.length : 0;
   return <details className="bg-white rounded-2xl border border-slate-100 p-4">
     <summary className="cursor-pointer text-sm font-semibold text-slate-700">Backups & recovery</summary>
-    <p className="text-xs text-slate-500 mt-3">Download a backup of all months, including receipts, budgets, savings goals, recurring schedules and notifications. Keep a copy outside this browser.</p>
+    <p className="text-xs text-slate-500 mt-3">Download a backup of all months, including receipts, budgets, savings goals, recurring schedules, custom categories, profile settings, your companion and notifications. Keep a copy outside this browser.</p>
     <div className="flex gap-2 mt-3">
       <button type="button" disabled={exportDisabled} className="rounded-xl bg-slate-900 text-white px-3 py-2 text-xs disabled:opacity-40" onClick={() => {
         try { downloadJSON(exportBackup(ledger), 'MicroLedger-backup-' + localDate() + '.json'); setError(null); }
@@ -45,7 +45,7 @@ export function BackupPanel({ledger, onRestore, exportDisabled}: {ledger: Ledger
     {error && <p role="alert" className="text-xs text-rose-700 mt-3">{error}</p>}
     {preview && <div className="mt-3 p-3 rounded-xl bg-slate-50 text-xs space-y-2">
       <p className="font-semibold">Ready to restore {preview.ledger.transactions.length} backed-up expenses</p>
-      <p>Adds {added} missing expenses. Existing expenses and matching records stay as they are. Your monthly budget becomes {formatPKR(preview.ledger.monthlyBudgetPKR)}. Missing savings goals are added; matching goals keep their current contributions. Category limits are restored from the backup. Missing recurring schedules and notifications are added; existing schedules keep their current progress.</p>
+      <p>Adds {added} missing expenses. Existing expenses and matching records stay as they are. Your monthly budget becomes {formatPKR(preview.ledger.monthlyBudgetPKR)}. Custom categories are merged; existing profile settings stay as they are. Missing savings goals are added; matching goals keep their current contributions. Category limits are restored from the backup. Missing recurring schedules and notifications are added; existing schedules keep their current progress.</p>
       <p>Backup created {new Date(preview.exportedAt).toLocaleString()}.</p>
       <div className="flex gap-3">
         <button type="button" className="rounded-lg bg-orange-500 text-white px-3 py-2 disabled:opacity-40" onClick={() => {if (onRestore(preview)) setPreview(null);}}>Confirm merge & restore</button>

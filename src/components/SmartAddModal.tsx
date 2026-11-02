@@ -1,3 +1,8 @@
+import {Mascot} from './Mascot';
+import {DEFAULT_MASCOT,type MascotSettings} from '../lib/personalization';
+import {parseExpenseInput} from '../lib/expense-parser';
+import {prepareReceiptImage} from '../lib/receipt-image';
+import { categoriesFor } from '../lib/settings';
 import { localDate, parsePKR, validDate } from '../lib/finance';
 import { motion, useReducedMotion } from 'motion/react';
 import React, { useState, useEffect, useRef } from 'react';
@@ -26,6 +31,10 @@ import {
 import { SAMPLE_RECEIPTS, SampleReceipt } from '../data/sampleReceipts';
 
 interface SmartAddModalProps {
+  mascot?:MascotSettings;
+  onAddCategory?: (name:string)=>string|null;
+  customCategories?: string[];
+  initialVoice?: boolean;
   initialDraft?: TransactionData | null;
   initialMode?: 'manual' | 'text' | 'receipt';
   initialTransaction?: StoredTransaction | null;
@@ -38,19 +47,25 @@ interface SmartAddModalProps {
 }
 
 export const SmartAddModal: React.FC<SmartAddModalProps> = ({
+  mascot = DEFAULT_MASCOT,
   initialMode = 'manual',
   initialDraft = null,
+  initialVoice = false,
+  customCategories = [],
+  onAddCategory,
   initialTransaction = null,
   onSaveExpense,
   onClose,
 }) => {
+  const categories=categoriesFor(customCategories);
   const isEditing = Boolean(initialTransaction);
   const reducedMotion=useReducedMotion();
   const [saved,setSaved]=useState(false);
   const saving=useRef(false);
   const closeTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+  const requestRef=useRef<AbortController|null>(null);
   const dialogRef=useRef<HTMLDivElement>(null);
-  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;const overflow=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{clearTimeout(closeTimer.current);document.body.style.overflow=overflow;previous?.focus();};},[]);
+  useEffect(()=>{const previous=document.activeElement as HTMLElement|null;const overflow=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{requestRef.current?.abort();clearTimeout(closeTimer.current);document.body.style.overflow=overflow;previous?.focus();};},[]);
 
   // Tab order: 1. Manual Form, 2. Smart Note, 3. Scan Receipt
   const [activeTab, setActiveTab] = useState<'manual' | 'text' | 'receipt'>(
@@ -79,6 +94,9 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
   const [aiTip, setAiTip] = useState<string | null>(null);
   const [extractedNotice, setExtractedNotice] = useState<string | null>(null);
 
+  const [addingCategory,setAddingCategory]=useState(false);
+  const [categoryName,setCategoryName]=useState('');
+  const createCategory=()=>{if(!onAddCategory)return;const error=onAddCategory(categoryName);if(error){setErrorMessage(error);return;}setCategory(categoryName.trim().replace(/\s+/g,' '));setCategoryName('');setAddingCategory(false);setErrorMessage(null);};
   const [canSpeak,setCanSpeak]=useState(false);
   const [listening,setListening]=useState(false);
   const speechRef=useRef<any>(null);
@@ -93,6 +111,12 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
     recognition.onerror=()=>{setListening(false);setErrorMessage('Could not capture voice. Check microphone permission or type your note.');};
     try{recognition.start();}catch{setErrorMessage('Voice is unavailable. Please type your note.');}
   };
+  useEffect(()=>{
+    if(initialVoice){
+      if((window as any).SpeechRecognition||(window as any).webkitSpeechRecognition)startVoice();
+      else setErrorMessage('Voice entry is not supported in this browser. You can type the same note below.');
+    }
+  },[]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Populate fields when initialTransaction is provided (Edit Mode)
@@ -137,29 +161,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
     'Chai & paratha 350',
   ];
 
-  const handleFileUpload = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setErrorMessage('Please select an image file (PNG, JPG, WebP).');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      const [header, base64Data] = dataUrl.split(',');
-      const mimeMatch = header.match(/data:(.*?);base64/);
-      const mimeType = mimeMatch ? mimeMatch[1] : file.type;
-
-      setReceiptImage({
-        name: file.name,
-        mimeType,
-        data: base64Data,
-        preview: dataUrl,
-      });
-      setErrorMessage(null);
-    };
-    reader.readAsDataURL(file);
-  };
-
+  const handleFileUpload=async(file:File)=>{setErrorMessage(null);try{setReceiptImage(await prepareReceiptImage(file));setExtractedNotice(null);}catch(error){setErrorMessage(error instanceof Error?error.message:'Could not open this receipt. Please try a different photo.');}};
   const loadSampleReceipt = (receipt: SampleReceipt) => {
     const dataUrl = receipt.generateImageData();
     const [header, base64Data] = dataUrl.split(',');
@@ -170,7 +172,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
       data: base64Data,
       preview: dataUrl,
     });
-    setSmartPrompt(`Receipt from ${receipt.merchant} Rs. ${receipt.expectedAmount}`);
+    setExtractedNotice(null);
     setErrorMessage(null);
   };
 
@@ -185,25 +187,14 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const payload: any = {
-        currentDate: date || localDate(),
-        currentTime: time || getCurrentTimeFormatted(),
-      };
-      if (smartPrompt.trim()) payload.text = smartPrompt.trim();
-      if (receiptImage && receiptImage.data) {
-        payload.image = {
-          mimeType: receiptImage.mimeType,
-          data: receiptImage.data,
-        };
+      let data:ParsedExpenseResponse;
+      if(activeTab==='text'){
+        data=parseExpenseInput(smartPrompt.trim(),undefined,date||localDate(),time||getCurrentTimeFormatted());
+      }else{
+        if(!receiptImage?.data)throw new Error('Choose a receipt photo before scanning.');
+        const controller=new AbortController();requestRef.current=controller;const timeout=setTimeout(()=>controller.abort(),35000);
+        try{const res=await fetch('/api/parse-expense',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({image:{mimeType:receiptImage.mimeType,data:receiptImage.data},currentDate:date||localDate(),currentTime:time||getCurrentTimeFormatted()})});if(!res.ok)throw new Error('Could not reach the receipt reader. Please retry.');data=await res.json();}finally{clearTimeout(timeout);}
       }
-
-      const res = await fetch('/api/parse-expense', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data: ParsedExpenseResponse = await res.json();
       setIsLoading(false);
 
       if (data.status === 'success' && data.transaction) {
@@ -227,7 +218,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
       }
     } catch (e) {
       setIsLoading(false);
-      setErrorMessage('Could not process automatically. Please enter details in the Manual Form.');
+      setErrorMessage(e instanceof Error&&e.name==='AbortError'?'Reading took too long. Try a smaller photo.':e instanceof TypeError?'The receipt reader is unavailable. Please retry in a moment.':e instanceof Error?e.message:'Could not process automatically. Please retry.');
     }
   };
 
@@ -308,6 +299,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
               {/* Tab 1: Manual Form (Default) */}
               <button
                 type="button"
+                disabled={isLoading}
                 onClick={() => {
                   setActiveTab('manual');
                   setErrorMessage(null);
@@ -324,7 +316,10 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
               {/* Tab 2: Smart Note */}
               <button
                 type="button"
+                disabled={isLoading}
                 onClick={() => {
+                  if(receiptImage){setDate(localDate());setTime(getCurrentTimeFormatted());setAmount('');setMerchant('');setNotes('');setAiTip(null);}
+                  setReceiptImage(null);setExtractedNotice(null);
                   setActiveTab('text');
                   setErrorMessage(null);
                 }}
@@ -358,6 +353,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
 
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto space-y-4">
+          {mascot.visible&&<div className="pp-entry-companion" role="status" aria-live="polite"><Mascot value={mascot} decorative expression={isLoading?'thinking':errorMessage?'concerned':extractedNotice?'celebrate':'happy'}/><span>{isLoading?'Reading your receipt… give me a moment.':errorMessage?'Let’s try again. Your details are still here.':extractedNotice?'Found it! Check the details before you save.':activeTab==='receipt'?'Show me a clear receipt with the total visible.':activeTab==='manual'?'Add your details, then save when ready.':'Tell me what you spent. I’ll help fill it in.'}</span></div>}
           {errorMessage && (
             <div role="alert" className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
@@ -437,12 +433,14 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                   onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-medium focus:outline-none focus:border-orange-500 focus:bg-white cursor-pointer"
                 >
-                  {CATEGORIES.map((c) => (
+                  {categories.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
                   ))}
                 </select>
+                {onAddCategory&&!addingCategory&&<button type="button" className="pp-text-button" onClick={()=>setAddingCategory(true)}>+ Add category</button>}
+                {addingCategory&&<div className="pp-inline-category"><input aria-label="New expense category" value={categoryName} maxLength={30} placeholder="Category name" onChange={event=>setCategoryName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();createCategory();}}}/><button type="button" onClick={createCategory}>Add category</button><button type="button" aria-label="Cancel new category" onClick={()=>setAddingCategory(false)}>×</button></div>}
               </div>
 
               {/* Date & Time Row */}
@@ -563,8 +561,8 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
             <div className="space-y-3">
               <input
                 ref={fileInputRef}
-                type="file"
-                accept="image/*"
+                type="file" disabled={isLoading}
+                accept="image/png,image/jpeg,image/webp" aria-label="Receipt image"
                 className="hidden"
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
@@ -588,23 +586,23 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setReceiptImage(null)}
+                    disabled={isLoading} aria-label="Remove attached receipt" onClick={() => {setReceiptImage(null);setExtractedNotice(null);}}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
-                <div
+                <button type="button" disabled={isLoading}
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-orange-500 bg-slate-50 hover:bg-orange-50/20 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2"
+                  className="w-full border-2 border-dashed border-slate-200 hover:border-orange-500 bg-slate-50 hover:bg-orange-50/20 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2"
                 >
                   <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center mx-auto">
                     <Camera className="w-5 h-5" />
                   </div>
                   <div className="text-xs font-bold text-slate-700">Tap to upload receipt image</div>
-                  <p className="text-[11px] text-slate-400">Photo of bill, receipt or invoice</p>
-                </div>
+                  <p className="text-[11px] text-slate-400">PNG, JPG or WebP · up to 10 MB</p>
+                </button>
               )}
 
               {/* Sample Receipts */}
@@ -615,7 +613,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
                 <div className="grid grid-cols-3 gap-2">
                   {SAMPLE_RECEIPTS.map((r) => (
                     <button
-                      key={r.id}
+                      key={r.id} disabled={isLoading}
                       type="button"
                       onClick={() => loadSampleReceipt(r)}
                       className="p-2 rounded-xl border border-slate-200 hover:border-orange-500 bg-white hover:bg-slate-50 text-left transition-all cursor-pointer"

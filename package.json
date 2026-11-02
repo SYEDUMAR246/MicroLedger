@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "android:signing": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/initialize-android-signing.ps1",
+    "android:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-android.ps1 -BuildType Release"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

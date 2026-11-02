@@ -19,3 +19,13 @@ The APK is written to `outputs\MicroLedger-test.apk`. It is a debug-signed testi
 - Close and reopen the app; check saved entries, settings and budget. Check Back, keyboard, dark mode and screen rotation.
 
 Ledger data is held in the app's private WebView storage. Uninstalling the app or clearing its storage removes that data. Export backups regularly. Installing this Android build does not import data from a desktop browser; use backup export/restore to transfer it.
+
+## Release-signed APK
+
+Run `npm run android:signing` once on Windows to create a persistent RSA release key outside the repository at `%USERPROFILE%\.android\microledger-signing\microledger-release.p12`. Its random password is stored in `password.clixml` encrypted with Windows DPAPI for the current Windows user on this machine. The script never overwrites existing signing material. Keep the key and an encrypted, portable copy of its password in secure backup storage before distributing future updates; the DPAPI password file alone is not a portable backup. Never commit or upload either signing file.
+
+Run `npm run android:release` to run regression tests, type checking, frontend compilation, Capacitor sync, the signed release build, Android release lint and APK signature verification. The resulting files are `outputs\MicroLedger.apk` and its `.sha256` checksum. The release build is not debuggable. CI can supply `MICROLEDGER_KEYSTORE`, `MICROLEDGER_STORE_PASSWORD`, `MICROLEDGER_KEY_PASSWORD` and optionally `MICROLEDGER_KEY_ALIAS` as protected environment variables. Release packaging fails without signing credentials.
+
+The release candidate uses the same app ID and version code 2. Its dedicated release key differs from the original debug key, so it cannot update an installed debug-signed test APK in place. Export a backup before replacing an installed debug version. Future release-signed updates must use this persistent release key and increasing version codes.
+
+A valid release signature verifies the publisher identity and file integrity; it does not constitute Google approval or guarantee that Play Protect warnings disappear. Submit the exact distributed APK and its public download URL to Google for review when appropriate. This repository does not disable Play Protect or change the app ID to evade its checks.

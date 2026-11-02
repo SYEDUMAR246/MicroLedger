@@ -8,3 +8,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Private Android signing material
+*.p12
+*.jks
+*.keystore
+**/keystore.properties
+**/password.clixml

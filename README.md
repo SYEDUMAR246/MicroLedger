@@ -5,9 +5,9 @@
 
 **A personal expense tracker built around everyday life in Pakistan.**
 
-[![Download MicroLedger for Android](https://img.shields.io/badge/Download_MicroLedger-Android_APK-F1846C?style=for-the-badge&logo=android&logoColor=white)](https://github.com/SYEDUMAR246/MicroLedger/releases/download/v1.0.0-android-test.1/MicroLedger-test.apk)
+[![Download MicroLedger for Android](https://img.shields.io/badge/Download_MicroLedger-Android_APK-F1846C?style=for-the-badge&logo=android&logoColor=white)](https://github.com/SYEDUMAR246/MicroLedger/releases/download/v1.0.0-rc.1/MicroLedger.apk)
 
-**Android 7.0+ · 53 MB · Test build 1** — Download the APK, open it on your phone and tap **Install**. No developer tools or hosting setup needed. [Release notes](https://github.com/SYEDUMAR246/MicroLedger/releases/tag/v1.0.0-android-test.1).
+**Android 7.0+ · Release-signed candidate 1** — Download the APK, open it on your phone and tap **Install**. No developer tools or hosting setup needed. Google Play Protect approval has not been obtained; warnings may still appear. [Release notes](https://github.com/SYEDUMAR246/MicroLedger/releases/tag/v1.0.0-rc.1).
 
 ![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
@@ -32,7 +32,7 @@ MicroLedger helps you record purchases, set a budget, and explore where your mon
 
 Latest update: [Paper & Peach, personalized setup and local OCR](docs/RELEASE-2026-11-02.md).
 
-Android app: [Build and install the MicroLedger test APK](ANDROID.md). The Android app includes bundled on-device receipt OCR, camera capture, phone voice entry, backup sharing and Android Back-button handling. Core features work without hosting; voice availability depends on the phone speech service.
+Android app: [Android installation and build guide](ANDROID.md). The Android app includes bundled on-device receipt OCR, camera capture, phone voice entry, backup sharing and Android Back-button handling. Core features work without hosting; voice availability depends on the phone speech service.
 
 ## Features
 
@@ -186,7 +186,7 @@ The deployment needs a Node.js server for `/api/parse-expense`; static hosting a
 - The dashboard, ledger and analytics use the selected calendar month. Daily allowance divides the remaining monthly budget by calendar days remaining; planned but unlogged bills are not deducted.
 - Category limits are repeating monthly targets shared across months. Their total cannot exceed the monthly budget.
 - Web Scan needs the Express server running. Android Scan uses bundled on-device OCR and works without hosting; Type also works without the parsing API.
-- This repository contains both the web app and the Capacitor Android project. An installable debug-signed test APK is available from the download button above; Play Store publishing is not configured.
+- This repository contains both the web app and the Capacitor Android project. An installable release-signed candidate APK is available from the download button above; Play Store publishing is not configured.
 
 ## Project guide
 

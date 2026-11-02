@@ -5,6 +5,10 @@
 
 **A personal expense tracker built around everyday life in Pakistan.**
 
+[![Download MicroLedger for Android](https://img.shields.io/badge/Download_MicroLedger-Android_APK-F1846C?style=for-the-badge&logo=android&logoColor=white)](https://github.com/SYEDUMAR246/MicroLedger/releases/download/v1.0.0-android-test.1/MicroLedger-test.apk)
+
+**Android 7.0+ · 53 MB · Test build 1** — Download the APK, open it on your phone and tap **Install**. No developer tools or hosting setup needed. [Release notes](https://github.com/SYEDUMAR246/MicroLedger/releases/tag/v1.0.0-android-test.1).
+
 ![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![Currency](https://img.shields.io/badge/Currency-PKR-F97316?style=flat-square)
@@ -177,12 +181,12 @@ The deployment needs a Node.js server for `/api/parse-expense`; static hosting a
 ## Data and current limitations
 
 - Transactions, receipt previews, budget settings, and notifications are stored in browser `localStorage`. Clearing site data can remove them; there is no server database or account sync.
-- Type stays in your browser. Receipt images go to your app’s Express server for local OCR; the parser does not send them to an external AI service.
+- Type runs locally. In the web app, receipt images go to your app’s Express server for local OCR. In the Android app, bundled ML Kit reads receipts on your phone. Neither parser needs an external AI service.
 - Currency is fixed to **PKR**; this is not a currency conversion tool.
 - The dashboard, ledger and analytics use the selected calendar month. Daily allowance divides the remaining monthly budget by calendar days remaining; planned but unlogged bills are not deducted.
 - Category limits are repeating monthly targets shared across months. Their total cannot exceed the monthly budget.
-- Scan needs the Express server running; Type also works without the parsing API.
-- This repository contains a web app; an Android package and Play Store publishing workflow are not included.
+- Web Scan needs the Express server running. Android Scan uses bundled on-device OCR and works without hosting; Type also works without the parsing API.
+- This repository contains both the web app and the Capacitor Android project. An installable debug-signed test APK is available from the download button above; Play Store publishing is not configured.
 
 ## Project guide
 
@@ -233,7 +237,7 @@ Backups include category limits and recurring schedules. Restore replaces catego
 
 The mobile interface uses **Today**, **Activity**, **Goals** and **Plan**, with a centered **+** for expense entry. Open **Profile** from the avatar. Profile contains personalization, companion controls, setup, custom categories, backups and record management.
 
-Type accepts English and Roman Urdu notes and opens editable review fields. Scan reads an uploaded receipt through the Node OCR API. Voice entry uses the browser’s speech-recognition service when supported and permitted. Nothing is saved until the user confirms.
+Type accepts English and Roman Urdu notes and opens editable review fields. Web Scan uses the Node OCR API; Android Scan uses bundled ML Kit and can capture a camera photo or read an uploaded image. Voice uses the phone speech service on Android and the browser speech-recognition service on the web when supported. Nothing is saved until the user confirms.
 
 Savings contributions record money already set aside. They do not move money or create an expense. Matching goals keep their current contributions when merging backups. Home shows bills separately from recorded spending; paused schedules are excluded from the upcoming bill card.
 

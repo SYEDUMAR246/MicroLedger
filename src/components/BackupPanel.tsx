@@ -1,9 +1,11 @@
 import React, { useRef, useState } from 'react';
 import { formatPKR } from '../types';
+import {isAndroid, shareBackup} from '../lib/native';
 import { localDate } from '../lib/finance';
 import { exportBackup, mergeBackup, parseBackup, type Backup, type Ledger } from '../lib/ledger';
 
-export function downloadJSON(text: string, filename: string) {
+export async function downloadJSON(text: string, filename: string) {
+  if (isAndroid) { await shareBackup(text, filename); return; }
   const url = URL.createObjectURL(new Blob([text], {type: 'application/json'}));
   const link = document.createElement('a');
   link.href = url;
@@ -24,8 +26,8 @@ export function BackupPanel({ledger, onRestore, exportDisabled}: {ledger: Ledger
     <summary className="cursor-pointer text-sm font-semibold text-slate-700">Backups & recovery</summary>
     <p className="text-xs text-slate-500 mt-3">Download a backup of all months, including receipts, budgets, savings goals, recurring schedules, custom categories, profile settings, your companion and notifications. Keep a copy outside this browser.</p>
     <div className="flex gap-2 mt-3">
-      <button type="button" disabled={exportDisabled} className="rounded-xl bg-slate-900 text-white px-3 py-2 text-xs disabled:opacity-40" onClick={() => {
-        try { downloadJSON(exportBackup(ledger), 'MicroLedger-backup-' + localDate() + '.json'); setError(null); }
+      <button type="button" disabled={exportDisabled} className="rounded-xl bg-slate-900 text-white px-3 py-2 text-xs disabled:opacity-40" onClick={async () => {
+        try { await downloadJSON(exportBackup(ledger), 'MicroLedger-backup-' + localDate() + '.json'); setError(null); }
         catch { setError('Could not create the backup. Please try again.'); }
       }}>Download backup</button>
       <button type="button" disabled={reading} className="rounded-xl border border-slate-200 px-3 py-2 text-xs disabled:opacity-40" onClick={() => input.current?.click()}>{reading ? 'Reading backup…' : 'Restore backup'}</button>

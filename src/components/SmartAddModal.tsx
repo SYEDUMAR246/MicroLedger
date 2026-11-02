@@ -2,6 +2,7 @@ import {Mascot} from './Mascot';
 import {DEFAULT_MASCOT,type MascotSettings} from '../lib/personalization';
 import {parseExpenseInput} from '../lib/expense-parser';
 import {prepareReceiptImage} from '../lib/receipt-image';
+import {isAndroid, scanOnPhone, takeReceiptPhoto, dictateOnPhone} from '../lib/native';
 import { categoriesFor } from '../lib/settings';
 import { localDate, parsePKR, validDate } from '../lib/finance';
 import { motion, useReducedMotion } from 'motion/react';
@@ -100,8 +101,14 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
   const [canSpeak,setCanSpeak]=useState(false);
   const [listening,setListening]=useState(false);
   const speechRef=useRef<any>(null);
-  useEffect(()=>{setCanSpeak(Boolean((window as any).SpeechRecognition||(window as any).webkitSpeechRecognition));return()=>{speechRef.current?.abort();};},[]);
+  useEffect(()=>{setCanSpeak(isAndroid || Boolean((window as any).SpeechRecognition||(window as any).webkitSpeechRecognition));return()=>{speechRef.current?.abort();};},[]);
   const startVoice=()=>{
+    if(isAndroid){
+      if(listening)return;
+      setListening(true);setErrorMessage(null);
+      dictateOnPhone().then(setSmartPrompt).catch(error=>setErrorMessage(error instanceof Error?error.message:'Please type your note.')).finally(()=>setListening(false));
+      return;
+    }
     if(listening){speechRef.current?.stop();return;}
     const Recognition=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
     if(!Recognition)return;
@@ -113,7 +120,7 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
   };
   useEffect(()=>{
     if(initialVoice){
-      if((window as any).SpeechRecognition||(window as any).webkitSpeechRecognition)startVoice();
+      if(isAndroid || (window as any).SpeechRecognition||(window as any).webkitSpeechRecognition)startVoice();
       else setErrorMessage('Voice entry is not supported in this browser. You can type the same note below.');
     }
   },[]);
@@ -190,6 +197,9 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
       let data:ParsedExpenseResponse;
       if(activeTab==='text'){
         data=parseExpenseInput(smartPrompt.trim(),undefined,date||localDate(),time||getCurrentTimeFormatted());
+      }else if(isAndroid){
+        if(!receiptImage?.data)throw new Error('Choose a receipt photo before scanning.');
+        data=await scanOnPhone(receiptImage.data,date||localDate(),time||getCurrentTimeFormatted());
       }else{
         if(!receiptImage?.data)throw new Error('Choose a receipt photo before scanning.');
         const controller=new AbortController();requestRef.current=controller;const timeout=setTimeout(()=>controller.abort(),35000);
@@ -559,6 +569,10 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({
           {/* TAB 3: SCAN RECEIPT */}
           {activeTab === 'receipt' && !isEditing && (
             <div className="space-y-3">
+              {isAndroid && <button type="button" disabled={isLoading} className="w-full py-3 rounded-2xl bg-orange-100 text-orange-800 font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-40"
+                onClick={async()=>{setErrorMessage(null);try{setReceiptImage(await takeReceiptPhoto());setExtractedNotice(null);}catch(error){setErrorMessage(error instanceof Error?error.message:'Camera cancelled. You can upload a photo instead.');}}}>
+                <Camera className="w-4 h-4"/> Take receipt photo
+              </button>}
               <input
                 ref={fileInputRef}
                 type="file" disabled={isLoading}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MicroLedger</string>
+    <string name="title_activity_main">MicroLedger</string>
+    <string name="package_name">com.syedumar.microledger</string>
+    <string name="custom_url_scheme">com.syedumar.microledger</string>
+</resources>

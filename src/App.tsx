@@ -1,4 +1,6 @@
 import {Onboarding} from './components/Onboarding';
+import {App as PhoneApp} from '@capacitor/app';
+import {isAndroid} from './lib/native';
 import {DEFAULT_MASCOT,completeSetup,saveMascot,type SetupAnswers,type MascotSettings} from './lib/personalization';
 /**
  * @license
@@ -193,6 +195,18 @@ export default function App() {
     }catch(error){setStorageError(error instanceof Error?error.message:'Could not record savings.');return false;}
   };
   const changeTab=(tab:AppTab)=>{setActiveTab(tab);if(tab==='home')setSelectedMonth(localDate().slice(0,7));setSelectedDate('');window.scrollTo({top:0,behavior:'instant'});};
+  useEffect(()=>{
+    if(!isAndroid)return;
+    const listener=PhoneApp.addListener('backButton',()=>{
+      if(isAddModalOpen){setIsAddModalOpen(false);setEditingTransaction(null);setQuickDraft(null);setEntrySpeech(false);}
+      else if(viewingReceiptTx)setViewingReceiptTx(null);
+      else if(isBudgetModalOpen)setIsBudgetModalOpen(false);
+      else if(isNotificationModalOpen)setIsNotificationModalOpen(false);
+      else if(activeTab!=='home')changeTab('home');
+      else void PhoneApp.minimizeApp();
+    });
+    return()=>{void listener.then(handle=>handle.remove());};
+  },[isAddModalOpen,viewingReceiptTx,isBudgetModalOpen,isNotificationModalOpen,activeTab]);
   const editExpense=(tx:StoredTransaction)=>{setQuickDraft(null);setEditingTransaction(tx);setIsAddModalOpen(true);};
   const monthTransactions=transactionsInMonth(transactions,selectedMonth);
   const totalSpentPKR=totalPKR(monthTransactions);
@@ -203,7 +217,7 @@ export default function App() {
   return <MotionConfig reducedMotion={preferences.reduceMotion?"always":"user"}><div className="paper-app" data-theme={theme} data-reduce-motion={preferences.reduceMotion}>
     <Navbar unreadCount={unreadNotificationsCount} onOpenNotifications={()=>setIsNotificationModalOpen(true)} onOpenProfile={()=>changeTab(activeTab==='profile'?'home':'profile')} profileActive={activeTab==='profile'} name={preferences.name}/>
     <main className="pp-main">
-      {(loadError||storageError)&&<div role="alert" className="rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm p-4 space-y-2 my-3"><p>{storageError||loadError}</p>{loadError&&<button type="button" className="underline font-semibold" onClick={()=>{try{const original=Object.fromEntries([LEDGER_KEY,...LEGACY_KEYS].map(key=>[key,localStorage.getItem(key)]));downloadJSON(JSON.stringify({app:'MicroLedger recovery data',original},null,2),'MicroLedger-recovery-'+localDate()+'.json');}catch{setStorageError('Allow site storage before retrying.');}}}>Download original recovery data</button>}</div>}
+      {(loadError||storageError)&&<div role="alert" className="rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm p-4 space-y-2 my-3"><p>{storageError||loadError}</p>{loadError&&<button type="button" className="underline font-semibold" onClick={async()=>{try{const original=Object.fromEntries([LEDGER_KEY,...LEGACY_KEYS].map(key=>[key,localStorage.getItem(key)]));await downloadJSON(JSON.stringify({app:'MicroLedger recovery data',original},null,2),'MicroLedger-recovery-'+localDate()+'.json');}catch{setStorageError('Allow site storage before retrying.');}}}>Download original recovery data</button>}</div>}
       <motion.div key={activeTab} initial={reducedMotion?false:{opacity:0,y:5}} animate={{opacity:1,y:0}} transition={{duration:.18}}>
         {activeTab==='home'&&<MobileHome onCustomizeMascot={()=>changeTab('profile')} name={preferences.name} ledger={ledger} month={localDate().slice(0,7)} onAdd={handleOpenAddModal} onActivity={()=>changeTab('expenses')} onPlan={()=>{setPlanView('bills');changeTab('plan');}} onEdit={editExpense}/>}
         {activeTab==='expenses'&&<>{monthPicker('Your month')}<JournalView transactions={monthTransactions} month={selectedMonth} onEdit={editExpense} onDelete={handleDeleteTransaction} onReceipt={setViewingReceiptTx} customCategories={ledger.customCategories??[]} onAdd={()=>handleOpenAddModal('manual')}/></>}

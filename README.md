@@ -28,6 +28,8 @@ MicroLedger helps you record purchases, set a budget, and explore where your mon
 
 Latest update: [Paper & Peach, personalized setup and local OCR](docs/RELEASE-2026-11-02.md).
 
+Android app: [Build and install the MicroLedger test APK](ANDROID.md). The Android app includes bundled on-device receipt OCR, camera capture, phone voice entry, backup sharing and Android Back-button handling. Core features work without hosting; voice availability depends on the phone speech service.
+
 ## Features
 
 | Feature | What you can do |
